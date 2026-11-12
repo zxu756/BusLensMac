@@ -38,7 +38,7 @@ struct BusLensApp: App {
         Window("BusLens Mac", id: "main") {
             BusDashboardView(monitor: monitor)
         }
-        .defaultSize(width: 980, height: 690)
+        .defaultSize(width: 980, height: 700)
 
         MenuBarExtra {
             BusMenuBarView(
@@ -51,7 +51,7 @@ struct BusLensApp: App {
                     NSApplication.shared.terminate(nil)
                 }
             )
-            .frame(width: 380, height: 470)
+            .frame(width: 380, height: 416)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "cable.connector.horizontal")

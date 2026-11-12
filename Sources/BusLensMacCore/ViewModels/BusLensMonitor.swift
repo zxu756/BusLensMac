@@ -210,13 +210,15 @@ public enum BusScreenshotExporter {
         let monitor = BusLensMonitor.preview()
 
         let mainView = BusDashboardView(monitor: monitor)
-            .frame(width: 980, height: 690)
-            .environment(\.colorScheme, .dark)
+            .frame(width: 980, height: 700)
+            .environment(\.colorScheme, .light)
         try renderPNG(view: mainView, to: directory.appendingPathComponent("screenshot-main.png"))
 
         let menuView = BusMenuBarView(monitor: monitor, onOpenWindow: {}, onQuit: {})
-            .frame(width: 380, height: 470)
-            .environment(\.colorScheme, .dark)
+            .frame(width: 380, height: 416)
+            .padding(14)
+            .background(Color(red: 0.859, green: 0.851, blue: 0.824))
+            .environment(\.colorScheme, .light)
         try renderPNG(view: menuView, to: directory.appendingPathComponent("screenshot-menubar.png"))
     }
 

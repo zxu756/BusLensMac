@@ -16,74 +16,133 @@ public struct BusMenuBarView: View {
     }
 
     public var body: some View {
+        let warns = monitor.snapshot.bottleneckDevices.count
+
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("BusLens Mac")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(BenchTheme.chalk)
-                    Text("\(monitor.snapshot.devices.count) attached devices, \(monitor.snapshot.power.displayBadge)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(BenchTheme.slate)
+            // Anodized Header + Compact Mini Port Strip
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bolt.horizontal.fill")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(BenchTheme.signalOrange)
+                            Text("BusLens Mac")
+                                .font(.system(size: 13.5, weight: .bold))
+                                .tracking(-0.2)
+                                .foregroundStyle(BenchTheme.ink)
+                        }
+                        Text("\(monitor.snapshot.devices.count) attached · \(monitor.snapshot.power.displayBadge)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(BenchTheme.muted)
+                    }
+                    Spacer()
+                    Text(verbatim: warns > 0 ? "\(warns) bottleneck\(warns == 1 ? "" : "s")" : "All optimal")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(warns > 0 ? .white : BenchTheme.pine)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(warns > 0 ? BenchTheme.signalOrange : BenchTheme.pine.opacity(0.12))
+                        )
                 }
-                Spacer()
-                let warns = monitor.snapshot.bottleneckDevices.count
-                Text(verbatim: warns > 0 ? "\(warns) warning\(warns == 1 ? "" : "s")" : "Optimal")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(warns > 0 ? BenchTheme.coral : BenchTheme.emerald)
+
+                // Mini 5-port dark graphite backplate preview
+                HStack(spacing: 5) {
+                    ForEach(Array(monitor.snapshot.controllers.prefix(5).enumerated()), id: \.element.id) { idx, ctrl in
+                        let hasWarn = ctrl.devices.contains { $0.verdict == .cableOrHubBottleneck }
+                        let led: Color = hasWarn
+                            ? BenchTheme.ledOrange
+                            : (ctrl.isConnected ? (ctrl.negotiatedGbps >= 40 ? BenchTheme.ledBlue : BenchTheme.ledMint) : BenchTheme.portRim)
+
+                        VStack(spacing: 4) {
+                            HStack(spacing: 3) {
+                                Circle().fill(led).frame(width: 4.5, height: 4.5)
+                                Text(verbatim: ctrl.protocolKind == .thunderboltUSB4 ? "TB\(idx)" : "U\(idx)")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(BenchTheme.portSilk)
+                            }
+                            Capsule()
+                                .fill(BenchTheme.portCavity)
+                                .frame(width: 24, height: 8)
+                                .overlay(Capsule().strokeBorder(ctrl.isConnected ? led.opacity(0.8) : BenchTheme.portRim, lineWidth: 1))
+                        }
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(BenchTheme.portBay))
+                    }
+                }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 15)
             .padding(.vertical, 12)
-            .background(BenchTheme.panel)
+            .background(BenchTheme.chassis)
 
-            Divider().overlay(BenchTheme.trace)
+            Rectangle().fill(BenchTheme.seam).frame(height: 1)
 
+            // Attached Device Rows
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(monitor.snapshot.devices.prefix(5)) { dev in
-                    HStack(spacing: 8) {
-                        Circle()
+                    let isWarn = dev.verdict.isWarning
+                    HStack(spacing: 9) {
+                        RoundedRectangle(cornerRadius: 1.5)
                             .fill(dev.verdict.color)
-                            .frame(width: 7, height: 7)
+                            .frame(width: 3, height: 24)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(dev.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(BenchTheme.chalk)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(BenchTheme.ink)
                                 .lineLimit(1)
-                            Text(dev.verdict.rawValue)
+                            Text("\(dev.vendor) · \(dev.verdict.rawValue)")
                                 .font(.system(size: 10.5))
-                                .foregroundStyle(dev.verdict.isWarning ? BenchTheme.coral : BenchTheme.slate)
+                                .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.muted)
+                                .lineLimit(1)
                         }
                         Spacer()
-                        Text(verbatim: dev.negotiatedSpeedLabel)
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(dev.verdict.isWarning ? BenchTheme.coral : BenchTheme.chalk)
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(verbatim: dev.negotiatedSpeedLabel)
+                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
+                            Text(verbatim: "max \(BottleneckDiagnoser.formatSpeedGbps(dev.portCeilingGbps))")
+                                .font(.system(size: 9.5, design: .monospaced))
+                                .foregroundStyle(BenchTheme.subtle)
+                        }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    Divider().overlay(BenchTheme.trace.opacity(0.65))
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 8.5)
+                    .background(isWarn ? BenchTheme.signalOrange.opacity(0.055) : BenchTheme.plate)
+
+                    Rectangle().fill(BenchTheme.hairline).frame(height: 1)
                 }
             }
 
             Spacer(minLength: 0)
 
+            Rectangle().fill(BenchTheme.seam).frame(height: 1)
+
             HStack(spacing: 8) {
                 Button(action: onOpenWindow) {
-                    Text("Open bench")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(BenchTheme.chalk)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(BenchTheme.slot))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(BenchTheme.trace, lineWidth: 1))
+                    Text("Open schematic")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5.5)
+                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(BenchTheme.portBay))
                 }
                 .buttonStyle(.plain)
 
                 Button(action: { monitor.refresh() }) {
-                    Text("Rescan")
-                        .font(.system(size: 12))
-                        .foregroundStyle(BenchTheme.slate)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10.5, weight: .semibold))
+                        Text("Rescan")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundStyle(BenchTheme.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5.5)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(BenchTheme.plate))
+                    .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(BenchTheme.seam, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
 
@@ -92,16 +151,22 @@ public struct BusMenuBarView: View {
                 Button(action: onQuit) {
                     Text("Quit")
                         .font(.system(size: 12))
-                        .foregroundStyle(BenchTheme.slate)
+                        .foregroundStyle(BenchTheme.muted)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 5)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 15)
             .padding(.vertical, 10)
-            .background(BenchTheme.panel)
+            .background(BenchTheme.chassis)
         }
-        .background(BenchTheme.chassis)
+        .background(BenchTheme.plate)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(BenchTheme.seam, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .preferredColorScheme(.light)
     }
 }

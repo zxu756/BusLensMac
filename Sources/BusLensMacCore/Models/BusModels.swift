@@ -7,8 +7,8 @@ public enum BusProtocolKind: String, Codable, Equatable, Sendable {
 
     public var badgeColor: Color {
         switch self {
-        case .thunderboltUSB4: return Color(red: 0.38, green: 0.65, blue: 0.98) // Cobalt #60A5FA
-        case .usbHost: return Color(red: 0.22, green: 0.74, blue: 0.97)         // Cyan #38BDF8
+        case .thunderboltUSB4: return Color(red: 0.082, green: 0.341, blue: 0.690) // Thunderbolt Cobalt #1557B0
+        case .usbHost: return Color(red: 0.075, green: 0.451, blue: 0.337)         // SuperSpeed Pine #137356
         }
     }
 }
@@ -26,11 +26,11 @@ public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
 
     public var color: Color {
         switch self {
-        case .optimalTunnel: return Color(red: 0.38, green: 0.65, blue: 0.98)       // Cobalt
-        case .cableOrHubBottleneck: return Color(red: 0.98, green: 0.44, blue: 0.52) // Coral #FB7185
-        case .superSpeedOptimal: return Color(red: 0.20, green: 0.83, blue: 0.60)   // Emerald #34D399
-        case .hidOptimal: return Color(red: 0.55, green: 0.64, blue: 0.75)          // Slate
-        case .idlePort: return Color(red: 0.42, green: 0.49, blue: 0.58)
+        case .optimalTunnel: return Color(red: 0.082, green: 0.341, blue: 0.690)       // Thunderbolt Cobalt #1557B0
+        case .cableOrHubBottleneck: return Color(red: 0.863, green: 0.271, blue: 0.094) // Signal Orange #DC4518
+        case .superSpeedOptimal: return Color(red: 0.075, green: 0.451, blue: 0.337)   // SuperSpeed Pine #137356
+        case .hidOptimal: return Color(red: 0.341, green: 0.349, blue: 0.369)          // Silkscreen Graphite
+        case .idlePort: return Color(red: 0.482, green: 0.494, blue: 0.522)
         }
     }
 }
