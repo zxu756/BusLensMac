@@ -11,6 +11,14 @@ public enum BusProtocolKind: String, Codable, Equatable, Sendable {
         case .usbHost: return Color(red: 0.075, green: 0.451, blue: 0.337)         // SuperSpeed Pine #137356
         }
     }
+
+    @MainActor
+    public func localizedTitle(_ localizer: AppLocalizer) -> String {
+        switch self {
+        case .thunderboltUSB4: return localizer.L("Thunderbolt / USB4", "雷雳 / USB4")
+        case .usbHost: return localizer.L("USB Host", "USB 主控")
+        }
+    }
 }
 
 public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
@@ -31,6 +39,17 @@ public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
         case .superSpeedOptimal: return Color(red: 0.075, green: 0.451, blue: 0.337)   // SuperSpeed Pine #137356
         case .hidOptimal: return Color(red: 0.341, green: 0.349, blue: 0.369)          // Silkscreen Graphite
         case .idlePort: return Color(red: 0.482, green: 0.494, blue: 0.522)
+        }
+    }
+
+    @MainActor
+    public func localizedLabel(_ localizer: AppLocalizer) -> String {
+        switch self {
+        case .optimalTunnel: return localizer.L("Full PCIe / USB4 tunnel", "满速 PCIe / USB4 隧道")
+        case .cableOrHubBottleneck: return localizer.L("Cable or hub bottleneck", "线材或扩展坞瓶颈")
+        case .superSpeedOptimal: return localizer.L("SuperSpeed USB optimal", "USB 3 超高速正常")
+        case .hidOptimal: return localizer.L("HID / low-latency USB2", "HID 低延迟通道")
+        case .idlePort: return localizer.L("Receptacle open", "物理端口空闲")
         }
     }
 }
@@ -81,6 +100,38 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         guard portCeilingGbps > 0 else { return 0 }
         return min(1.0, max(0.03, negotiatedGbps / portCeilingGbps))
     }
+
+    @MainActor
+    public func localizedBusName(_ localizer: AppLocalizer) -> String {
+        guard localizer.isChinese else { return busName }
+        return busName
+            .replacingOccurrences(of: "Thunderbolt / USB4 Bus", with: "雷雳 / USB4 总线")
+            .replacingOccurrences(of: "Thunderbolt Bus", with: "雷雳总线")
+            .replacingOccurrences(of: "USB 3.1 Bus", with: "USB 3.1 总线")
+            .replacingOccurrences(of: "USB 3.0 Bus", with: "USB 3.0 总线")
+            .replacingOccurrences(of: "USB Bus", with: "USB 总线")
+    }
+
+    @MainActor
+    public func localizedModeDescription(_ localizer: AppLocalizer) -> String {
+        guard localizer.isChinese else { return modeDescription }
+        let lower = modeDescription.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch lower {
+        case "thunderbolt 3": return "雷雳 3 隧道模式"
+        case "thunderbolt 4": return "雷雳 4 隧道模式"
+        case "thunderbolt 5": return "雷雳 5 隧道模式"
+        case "usb4", "usb 4": return "USB4 隧道模式"
+        case "via usb hub": return "经由 USB 集线器中转"
+        case "direct root port": return "主板根端口直连"
+        default: return modeDescription
+        }
+    }
+
+    @MainActor
+    public func localizedDiagnosticDetail(_ localizer: AppLocalizer) -> String {
+        guard localizer.isChinese else { return diagnosticDetail }
+        return BottleneckDiagnoser.chineseDiagnosticDetail(for: self)
+    }
 }
 
 public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable {
@@ -112,6 +163,17 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
         self.isConnected = isConnected
         self.devices = devices
     }
+
+    @MainActor
+    public func localizedTitle(_ localizer: AppLocalizer) -> String {
+        guard localizer.isChinese else { return title }
+        return title
+            .replacingOccurrences(of: "Thunderbolt / USB4 Bus", with: "雷雳 / USB4 总线")
+            .replacingOccurrences(of: "Thunderbolt Bus", with: "雷雳总线")
+            .replacingOccurrences(of: "USB 3.1 Bus", with: "USB 3.1 总线")
+            .replacingOccurrences(of: "USB 3.0 Bus", with: "USB 3.0 总线")
+            .replacingOccurrences(of: "USB Bus", with: "USB 总线")
+    }
 }
 
 public struct PowerDeliverySummary: Codable, Equatable, Sendable {
@@ -129,6 +191,19 @@ public struct PowerDeliverySummary: Codable, Equatable, Sendable {
         if let w = negotiatedWatts, w > 0 {
             return "\(w)W USB-C PD"
         }
+        return powerSource
+    }
+
+    @MainActor
+    public func localizedBadge(_ localizer: AppLocalizer) -> String {
+        if let w = negotiatedWatts, w > 0 {
+            return "\(w)W USB-C PD"
+        }
+        guard localizer.isChinese else { return powerSource }
+        let lower = powerSource.lowercased()
+        if lower.contains("ac") { return "交流电源" }
+        if lower.contains("battery") { return "内置电池" }
+        if lower.contains("unknown") { return "未知电源" }
         return powerSource
     }
 }

@@ -98,4 +98,36 @@ public enum BottleneckDiagnoser {
 
         return (.superSpeedOptimal, "Active link at \(formatSpeedGbps(negotiatedGbps)).")
     }
+
+    @MainActor
+    public static func formatSpeedGbps(_ gbps: Double, localizer: AppLocalizer) -> String {
+        if gbps <= 0 {
+            return localizer.L("Idle", "空闲")
+        }
+        return formatSpeedGbps(gbps)
+    }
+
+    public static func chineseDiagnosticDetail(for device: AttachedBusDevice) -> String {
+        let rate = formatSpeedGbps(device.negotiatedGbps)
+        switch device.verdict {
+        case .optimalTunnel:
+            let gen = device.negotiatedGbps >= 80.0 ? "雷雳 5 (80 Gb/s)" : "雷雳 / USB4 (40 Gb/s)"
+            return "已建立 \(gen) 满速 PCIe 隧道 — 外置高速存储与显示器带宽完全释放。"
+        case .cableOrHubBottleneck:
+            if device.negotiatedGbps <= 0.5 {
+                return "高速存储/扩展坞受困于 USB 2.0 (480 Mb/s) — 请更换仅充电线为认证 40 Gb/s USB4 数据线。"
+            }
+            let behindHub = device.depth > 0 || device.modeDescription.lowercased().contains("hub")
+            if behindHub {
+                return "当前协商速率仅 \(rate)（经由中间 USB 集线器降速）；若硬盘盒支持 USB4/雷雳 3，请使用 40 Gb/s 线材直连机身端口。"
+            }
+            return "当前协商速率仅 \(rate)（受限于 10 Gb/s 线材或 USB 3.2 桥接）；若外设支持 USB4/雷雳 3，请更换 40 Gb/s 认证线材。"
+        case .superSpeedOptimal:
+            return "正以 USB 3 SuperSpeed (\(rate)) 高速模式稳定运行。"
+        case .hidOptimal:
+            return "独立 USB 2.0 通道 (\(rate)) — 符合键盘鼠标等低延迟 HID 外设的最佳工作速率。"
+        case .idlePort:
+            return "物理端口当前空闲，未接入设备。"
+        }
+    }
 }

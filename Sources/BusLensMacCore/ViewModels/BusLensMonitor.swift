@@ -10,6 +10,16 @@ public enum BusFilterMode: String, CaseIterable, Identifiable, Sendable {
     case usbPeripherals = "USB peripherals"
 
     public var id: String { rawValue }
+
+    @MainActor
+    public func localizedTitle(_ localizer: AppLocalizer) -> String {
+        switch self {
+        case .all: return localizer.L("All attached devices", "全部连接设备")
+        case .bottlenecks: return localizer.L("Cable bottlenecks", "线材降速瓶颈")
+        case .thunderbolt: return localizer.L("Thunderbolt / USB4", "雷雳 / USB4")
+        case .usbPeripherals: return localizer.L("USB peripherals", "USB 外设")
+        }
+    }
 }
 
 @MainActor
@@ -57,12 +67,18 @@ public final class BusLensMonitor: ObservableObject {
     }
 
     public var menuBarLabelText: String {
+        localizedMenuBarLabel(.shared)
+    }
+
+    public func localizedMenuBarLabel(_ localizer: AppLocalizer) -> String {
         let warnCount = snapshot.bottleneckDevices.count
         if warnCount > 0 {
-            return "\(warnCount) bottleneck"
+            return localizer.L("\(warnCount) bottleneck", "\(warnCount) 处瓶颈")
         }
         let peak = snapshot.peakNegotiatedGbps
-        return peak > 0 ? BottleneckDiagnoser.formatSpeedGbps(peak) : "Ports idle"
+        return peak > 0
+            ? BottleneckDiagnoser.formatSpeedGbps(peak)
+            : localizer.L("Ports idle", "端口空闲")
     }
 
     // MARK: - Deterministic Hardware Bench Preview
@@ -205,21 +221,33 @@ public final class BusLensMonitor: ObservableObject {
 
 public enum BusScreenshotExporter {
     @MainActor
-    public static func exportMarketingScreenshots(to directory: URL) throws {
+    public static func exportMarketingScreenshots(
+        to directory: URL,
+        language: AppLanguage = .en
+    ) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let monitor = BusLensMonitor.preview()
+        let localizer = AppLocalizer(fixedLanguage: language)
+        let suffix = (language == .zhHans) ? "-zh" : ""
 
-        let mainView = BusDashboardView(monitor: monitor)
-            .frame(width: 980, height: 700)
+        let mainView = BusDashboardView(monitor: monitor, localizer: localizer)
+            .environment(\.locale, language.locale)
+            .frame(width: 1060, height: 715)
             .environment(\.colorScheme, .light)
-        try renderPNG(view: mainView, to: directory.appendingPathComponent("screenshot-main.png"))
+        try renderPNG(view: mainView, to: directory.appendingPathComponent("screenshot-main\(suffix).png"))
 
-        let menuView = BusMenuBarView(monitor: monitor, onOpenWindow: {}, onQuit: {})
-            .frame(width: 380, height: 416)
-            .padding(14)
-            .background(Color(red: 0.859, green: 0.851, blue: 0.824))
-            .environment(\.colorScheme, .light)
-        try renderPNG(view: menuView, to: directory.appendingPathComponent("screenshot-menubar.png"))
+        let menuView = BusMenuBarView(
+            monitor: monitor,
+            localizer: localizer,
+            onOpenWindow: {},
+            onQuit: {}
+        )
+        .environment(\.locale, language.locale)
+        .frame(width: 410, height: 444)
+        .padding(14)
+        .background(Color(red: 0.859, green: 0.851, blue: 0.824))
+        .environment(\.colorScheme, .light)
+        try renderPNG(view: menuView, to: directory.appendingPathComponent("screenshot-menubar\(suffix).png"))
     }
 
     @MainActor
