@@ -20,7 +20,7 @@ public struct BusMenuBarView: View {
     }
 
     public var body: some View {
-        let warns = monitor.snapshot.bottleneckDevices.count
+        let indetCount = monitor.snapshot.indeterminateDevices.count
 
         VStack(alignment: .leading, spacing: 0) {
             // Anodized Header + Compact Mini Port Strip
@@ -34,6 +34,17 @@ public struct BusMenuBarView: View {
                             .font(.system(size: 13.5, weight: .bold))
                             .tracking(-0.2)
                             .foregroundStyle(BenchTheme.ink)
+                        if monitor.isStaticPreview {
+                            Text(localizer.L("[DEMO]", "[演示数据]"))
+                                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(BenchTheme.signalOrange)
+                                )
+                        }
                     }
                     Spacer()
                     LanguageTogglePill(localizer: localizer, compact: true)
@@ -50,27 +61,26 @@ public struct BusMenuBarView: View {
 
                     Spacer()
 
-                    Text(warns > 0
-                         ? localizer.L(
-                            "\(warns) bottleneck\(warns == 1 ? "" : "s")",
-                            "\(warns) 处降速瓶颈"
-                         )
-                         : localizer.L("All optimal", "全部满速正常"))
+                    Text(monitor.snapshot.devices.isEmpty
+                         ? localizer.L("Ports idle", "端口空闲")
+                         : (indetCount > 0
+                            ? localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
+                            : localizer.L("Full / HID normal", "满速 / 低速外设正常")))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                        .foregroundStyle(warns > 0 ? .white : BenchTheme.pine)
+                        .foregroundStyle(BenchTheme.ink)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .fixedSize(horizontal: true, vertical: false)
                         .background(
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(warns > 0 ? BenchTheme.signalOrange : BenchTheme.pine.opacity(0.12))
+                                .fill(BenchTheme.recessed)
                         )
                 }
 
                 // Mini 5-port dark graphite backplate preview
                 HStack(spacing: 5) {
                     ForEach(Array(monitor.snapshot.controllers.prefix(5).enumerated()), id: \.element.id) { idx, ctrl in
-                        let hasWarn = ctrl.devices.contains { $0.verdict == .cableOrHubBottleneck }
+                        let hasWarn = ctrl.devices.contains { $0.verdict.isWarning }
                         let led: Color = hasWarn
                             ? BenchTheme.ledOrange
                             : (ctrl.isConnected ? (ctrl.negotiatedGbps >= 40 ? BenchTheme.ledBlue : BenchTheme.ledMint) : BenchTheme.portRim)
@@ -78,7 +88,7 @@ public struct BusMenuBarView: View {
                         VStack(spacing: 4) {
                             HStack(spacing: 3) {
                                 Circle().fill(led).frame(width: 4.5, height: 4.5)
-                                Text(verbatim: ctrl.protocolKind == .thunderboltUSB4 ? "TB\(idx)" : "U\(idx)")
+                                Text(verbatim: ctrl.protocolKind == .thunderboltUSB4 ? "TB\(idx)" : "C\(idx)")
                                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                                     .foregroundStyle(BenchTheme.portSilk)
                             }
@@ -112,7 +122,7 @@ public struct BusMenuBarView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(BenchTheme.ink)
                                 .lineLimit(1)
-                            Text("\(dev.vendor) · \(dev.verdict.localizedLabel(localizer))")
+                            Text("\(dev.localizedVendor(localizer)) · \(dev.verdict.localizedLabel(localizer))")
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.muted)
                                 .lineLimit(1)
@@ -123,9 +133,10 @@ public struct BusMenuBarView: View {
                                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
                                 .fixedSize(horizontal: true, vertical: false)
+                            let ceilingStr = dev.localizedPortCeilingLabel(localizer)
                             Text(localizer.L(
-                                "max \(BottleneckDiagnoser.formatSpeedGbps(dev.portCeilingGbps))",
-                                "上限 \(BottleneckDiagnoser.formatSpeedGbps(dev.portCeilingGbps))"
+                                "ceiling \(ceilingStr)",
+                                "上限 \(ceilingStr)"
                             ))
                             .font(.system(size: 9.5, design: .monospaced))
                             .foregroundStyle(BenchTheme.subtle)

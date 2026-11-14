@@ -1,0 +1,13 @@
+=== BusLens Mac M0 Acceptance Gate ===
+Date (UTC): 2026-11-14T04:07:07Z
+Host: macOS 27.0.1 (26A434) arm64
+Binary: /Users/xu/Projects/BusLensMac/build/BusLensMac.app/Contents/MacOS/BusLensMac
+
+[PASS] Row 1: 50x consecutive `--cli topology --json` (25 en + 25 zh): all 50 exited 0 under 5.0s (min=256.7ms, median=312.6ms, max=373.2ms, total=15.61s, 0 identifier leaks)
+[PASS] Row 2: `--cli bogus` (--lang en, --lang zh, default) exited with code 2, 0-byte stdout, localized stderr
+[PASS] Row 3: Synthetic TB device 20 Gb/s on 40 Gb/s bus (+ daisy-chain) reports '20 Gb/s' (not 40 Gb/s) in EN & ZH
+[PASS] Row 4: Synthetic Samsung T7 at 10 Gb/s is indeterminate (ceiling Unknown/未知), never flagged throttled or told to replace cable in EN & ZH
+[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s, 480 Mb/s, 12 Mb/s) matching raw speeds, 0 internal-hub false positives, 0 identifier leaks
+[PASS] Row 6: `swift test --no-parallel` passed with 0 new `BusLensMacTests.*` files in ~/Library/Preferences (before=16, after=16, added=0)
+
+=== ALL 6 M0 ACCEPTANCE ROWS PASSED ===

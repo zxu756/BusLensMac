@@ -38,6 +38,47 @@ public enum AppLanguage: String, CaseIterable, Codable, Identifiable, Sendable {
     }
 }
 
+public protocol LanguagePreferenceStore: AnyObject {
+    func string(forKey key: String) -> String?
+    func set(_ value: String?, forKey key: String)
+}
+
+public final class UserDefaultsPreferenceStore: LanguagePreferenceStore {
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    public func string(forKey key: String) -> String? {
+        defaults.string(forKey: key)
+    }
+
+    public func set(_ value: String?, forKey key: String) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
+
+public final class InMemoryPreferenceStore: LanguagePreferenceStore {
+    private var storage: [String: String]
+
+    public init(initial: [String: String] = [:]) {
+        self.storage = initial
+    }
+
+    public func string(forKey key: String) -> String? {
+        storage[key]
+    }
+
+    public func set(_ value: String?, forKey key: String) {
+        storage[key] = value
+    }
+}
+
 @MainActor
 public final class AppLocalizer: ObservableObject {
     nonisolated public static let defaultPreferenceKey = "local.xu.BusLensMac.language"
@@ -46,22 +87,22 @@ public final class AppLocalizer: ObservableObject {
     @Published public var language: AppLanguage {
         didSet {
             guard persistChanges else { return }
-            userDefaults.set(language.rawValue, forKey: preferenceKey)
+            preferenceStore.set(language.rawValue, forKey: preferenceKey)
         }
     }
 
     public let preferenceKey: String
-    private let userDefaults: UserDefaults
+    private let preferenceStore: LanguagePreferenceStore
     private var persistChanges: Bool
 
     public init(
         arguments: [String] = CommandLine.arguments,
-        userDefaults: UserDefaults = .standard,
+        preferenceStore: LanguagePreferenceStore,
         preferenceKey: String = AppLocalizer.defaultPreferenceKey,
         preferredLanguages: [String] = Locale.preferredLanguages,
         persistCLI: Bool = false
     ) {
-        self.userDefaults = userDefaults
+        self.preferenceStore = preferenceStore
         self.preferenceKey = preferenceKey
         self.persistChanges = true
 
@@ -69,7 +110,7 @@ public final class AppLocalizer: ObservableObject {
             self.persistChanges = persistCLI
             self.language = cliLang
             self.persistChanges = true
-        } else if let saved = userDefaults.string(forKey: preferenceKey),
+        } else if let saved = preferenceStore.string(forKey: preferenceKey),
                   let parsed = AppLanguage(rawValue: saved) ?? AppLanguage.parseCLI(saved) {
             self.language = parsed
         } else if let firstPreferred = preferredLanguages.first,
@@ -80,8 +121,24 @@ public final class AppLocalizer: ObservableObject {
         }
     }
 
+    public convenience init(
+        arguments: [String] = CommandLine.arguments,
+        userDefaults: UserDefaults = .standard,
+        preferenceKey: String = AppLocalizer.defaultPreferenceKey,
+        preferredLanguages: [String] = Locale.preferredLanguages,
+        persistCLI: Bool = false
+    ) {
+        self.init(
+            arguments: arguments,
+            preferenceStore: UserDefaultsPreferenceStore(defaults: userDefaults),
+            preferenceKey: preferenceKey,
+            preferredLanguages: preferredLanguages,
+            persistCLI: persistCLI
+        )
+    }
+
     public init(fixedLanguage: AppLanguage) {
-        self.userDefaults = .standard
+        self.preferenceStore = InMemoryPreferenceStore()
         self.preferenceKey = Self.defaultPreferenceKey
         self.persistChanges = false
         self.language = fixedLanguage

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import BusLensMacCore
 
-@Suite("BusLensMacCore Verification Suite")
+@Suite("BusLensMacCore Verification Suite", .timeLimit(.minutes(1)))
 struct BusLensMacCoreTests {
 
     @Test("Parses macOS Thunderbolt & USB link speed strings into Gbps")
@@ -14,27 +14,29 @@ struct BusLensMacCoreTests {
         #expect(BottleneckDiagnoser.parseSpeedGbps("12 Mb/s") == 0.012)
     }
 
-    @Test("Flags NVMe SSD on USB 2.0 charge cable or 10G hub while passing HID keyboards")
+    @Test("Evaluates negotiated link speeds honestly without guessing device capability from product names")
     func testBottleneckDiagnostics() {
-        let usb2Trap = BottleneckDiagnoser.evaluateDevice(
+        let usb2Drive = BottleneckDiagnoser.evaluateDevice(
             name: "Portable SSD X9 Pro",
             vendor: "Crucial",
             protocolKind: .usbHost,
             negotiatedGbps: 0.48,
-            portCeilingGbps: 40.0,
+            portCeilingGbps: nil,
             behindHub: false
         )
-        #expect(usb2Trap.verdict == .cableOrHubBottleneck)
+        #expect(usb2Drive.verdict == .indeterminate)
+        #expect(usb2Drive.detail.contains("cannot determine"))
 
-        let hub10G = BottleneckDiagnoser.evaluateDevice(
+        let usb10GEnclosure = BottleneckDiagnoser.evaluateDevice(
             name: "ASM2464PD USB4 NVMe Enclosure",
             vendor: "ASMedia",
             protocolKind: .usbHost,
             negotiatedGbps: 10.0,
-            portCeilingGbps: 40.0,
+            portCeilingGbps: nil,
             behindHub: true
         )
-        #expect(hub10G.verdict == .cableOrHubBottleneck)
+        #expect(usb10GEnclosure.verdict == .indeterminate)
+        #expect(usb10GEnclosure.detail.contains("cannot determine"))
 
         let fullTB = BottleneckDiagnoser.evaluateDevice(
             name: "TBU405Pro",
@@ -44,17 +46,17 @@ struct BusLensMacCoreTests {
             portCeilingGbps: 40.0,
             behindHub: false
         )
-        #expect(fullTB.verdict == .optimalTunnel)
+        #expect(fullTB.verdict == .fullRate)
 
         let hidKB = BottleneckDiagnoser.evaluateDevice(
             name: "60HE Analog Keyboard",
             vendor: "Wooting",
             protocolKind: .usbHost,
             negotiatedGbps: 0.48,
-            portCeilingGbps: 10.0,
+            portCeilingGbps: nil,
             behindHub: true
         )
-        #expect(hidKB.verdict == .hidOptimal)
+        #expect(hidKB.verdict == .lowSpeedPeripheral)
     }
 
     @Test("Parses SPThunderboltDataType & SPUSBHostDataType JSON and scrubs serials/UUIDs")
@@ -115,8 +117,9 @@ struct BusLensMacCoreTests {
 
         let snap = BusProfilerCollector.parseSystemProfilerJSON(rawData)
         #expect(snap.activeTunnelCount == 1)
-        #expect(snap.bottleneckDevices.count == 1)
-        #expect(snap.bottleneckDevices.first?.name == "Portable SSD T7")
+        #expect(snap.bottleneckDevices.isEmpty)
+        let t7 = try #require(snap.devices.first { $0.name == "Portable SSD T7" })
+        #expect(t7.verdict == .indeterminate)
         #expect(snap.power.negotiatedWatts == 96)
     }
 
@@ -137,55 +140,53 @@ struct BusLensMacCoreTests {
     @Test("Toggles live between zh-Hans and en and localizes link verdicts & cable diagnostics")
     @MainActor
     func testLiveLanguageToggleAndDiagnostics() {
-        let suiteName = "BusLensMacTests.Toggle.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = InMemoryPreferenceStore()
 
         let localizer = AppLocalizer(
             arguments: [],
-            userDefaults: defaults,
+            preferenceStore: store,
             preferenceKey: AppLocalizer.defaultPreferenceKey,
             preferredLanguages: ["en-US"]
         )
         #expect(localizer.language == .en)
-        #expect(LinkHealthVerdict.cableOrHubBottleneck.localizedLabel(localizer) == "Cable or hub bottleneck")
+        #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "Cannot determine if throttled")
 
         localizer.toggle()
         #expect(localizer.language == .zhHans)
-        #expect(defaults.string(forKey: AppLocalizer.defaultPreferenceKey) == "zh-Hans")
-        #expect(LinkHealthVerdict.cableOrHubBottleneck.localizedLabel(localizer) == "线材或扩展坞瓶颈")
-        #expect(LinkHealthVerdict.optimalTunnel.localizedLabel(localizer) == "满速 PCIe / USB4 隧道")
+        #expect(store.string(forKey: AppLocalizer.defaultPreferenceKey) == "zh-Hans")
+        #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "无法判断是否被限速")
+        #expect(LinkHealthVerdict.fullRate.localizedLabel(localizer) == "满速")
+        #expect(LinkHealthVerdict.lowSpeedPeripheral.localizedLabel(localizer) == "低速外设（正常）")
 
         let preview = BusLensMonitor.preview()
-        let throttled = preview.snapshot.bottleneckDevices.first { $0.negotiatedGbps <= 0.5 }!
-        #expect(throttled.localizedDiagnosticDetail(localizer).contains("USB 2.0 (480 Mb/s)"))
-        #expect(throttled.localizedDiagnosticDetail(localizer).contains("40 Gb/s"))
+        let usb480 = preview.snapshot.indeterminateDevices.first { $0.negotiatedGbps <= 0.5 }!
+        #expect(usb480.localizedDiagnosticDetail(localizer).contains("480 Mb/s"))
+        #expect(usb480.localizedDiagnosticDetail(localizer).contains("无法判断是否被限速"))
+        #expect(!usb480.localizedDiagnosticDetail(localizer).contains("40 Gb/s"))
 
         localizer.toggle()
         #expect(localizer.language == .en)
-        #expect(defaults.string(forKey: AppLocalizer.defaultPreferenceKey) == "en")
+        #expect(store.string(forKey: AppLocalizer.defaultPreferenceKey) == "en")
     }
 
-    @Test("Auto-detects Chinese system locale, respects UserDefaults & --lang flag, and preserves EN screenshots")
+    @Test("Auto-detects Chinese system locale, respects preference store & --lang flag, and preserves EN screenshots")
     @MainActor
     func testChineseLocaleAutoDetectCLIFlagAndChineseScreenshots() throws {
-        let suiteName = "BusLensMacTests.Locale.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = InMemoryPreferenceStore()
 
         let autoZh = AppLocalizer(
             arguments: ["BusLensMac"],
-            userDefaults: defaults,
+            preferenceStore: store,
             preferenceKey: AppLocalizer.defaultPreferenceKey,
             preferredLanguages: ["zh-Hans-CN", "en-US"]
         )
         #expect(autoZh.language == .zhHans)
         #expect(autoZh.L("Rescan", "重新探测") == "重新探测")
 
-        defaults.set("en", forKey: AppLocalizer.defaultPreferenceKey)
+        store.set("en", forKey: AppLocalizer.defaultPreferenceKey)
         let savedEn = AppLocalizer(
             arguments: ["BusLensMac"],
-            userDefaults: defaults,
+            preferenceStore: store,
             preferenceKey: AppLocalizer.defaultPreferenceKey,
             preferredLanguages: ["zh-Hans-CN"]
         )
@@ -193,7 +194,7 @@ struct BusLensMacCoreTests {
 
         let cliZh = AppLocalizer(
             arguments: ["BusLensMac", "--lang", "zh"],
-            userDefaults: defaults,
+            preferenceStore: store,
             preferenceKey: AppLocalizer.defaultPreferenceKey,
             preferredLanguages: ["en-US"]
         )

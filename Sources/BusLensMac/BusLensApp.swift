@@ -3,7 +3,6 @@ import BusLensMacCore
 import Foundation
 import SwiftUI
 
-@main
 struct BusLensApp: App {
     @StateObject private var monitor: BusLensMonitor
     @StateObject private var localizer: AppLocalizer
@@ -11,36 +10,13 @@ struct BusLensApp: App {
 
     init() {
         let args = CommandLine.arguments
-
-        if let idx = args.firstIndex(of: "--export-screenshots"), idx + 1 < args.count {
-            let outURL = URL(fileURLWithPath: args[idx + 1])
-            let exportLang = AppLocalizer.resolveCLILanguage(from: args) ?? .en
-            do {
-                try MainActor.assumeIsolated {
-                    try BusScreenshotExporter.exportMarketingScreenshots(to: outURL, language: exportLang)
-                }
-                print("Exported 2x Retina screenshots (\(exportLang.rawValue)) to \(outURL.path)")
-                exit(0)
-            } catch {
-                fputs("Failed to export screenshots: \(error.localizedDescription)\n", stderr)
-                exit(1)
-            }
-        }
-
-        if let idx = args.firstIndex(of: "--cli") {
-            let sub = (idx + 1 < args.count && !args[idx + 1].hasPrefix("--")) ? args[idx + 1] : "topology"
-            MainActor.assumeIsolated {
-                Self.runHeadlessCLI(subcmd: sub, localizer: AppLocalizer.shared)
-            }
-            exit(0)
-        }
-
-        _monitor = StateObject(wrappedValue: BusLensMonitor())
-        _localizer = StateObject(wrappedValue: AppLocalizer.shared)
+        let useDemo = args.contains("--demo")
+        _monitor = StateObject(wrappedValue: useDemo ? BusLensMonitor.preview() : BusLensMonitor())
+        _localizer = StateObject(wrappedValue: AppLocalizer(arguments: args))
     }
 
     var body: some Scene {
-        Window(localizer.L("BusLens Mac — Thunderbolt & USB-C Schematic", "BusLens Mac — 雷雳与 USB-C 端口诊断面板"), id: "main") {
+        Window(localizer.L("BusLens Mac — Thunderbolt & USB-C Link Inspector", "BusLens Mac — 雷雳与 USB-C 协商速率面板"), id: "main") {
             BusDashboardView(monitor: monitor, localizer: localizer)
         }
         .defaultSize(width: 1060, height: 715)
@@ -89,35 +65,5 @@ struct BusLensApp: App {
             }
         }
         .menuBarExtraStyle(.window)
-    }
-
-    @MainActor
-    private static func runHeadlessCLI(subcmd: String, localizer: AppLocalizer) {
-        let snap = BusProfilerCollector.collectLiveHost()
-        if subcmd == "bottlenecks" {
-            if snap.bottleneckDevices.isEmpty {
-                print(localizer.L(
-                    "No USB-C / Thunderbolt cable or hub bottlenecks detected.",
-                    "未检测到 USB-C / 雷雳线材或集线器降速瓶颈。"
-                ))
-                return
-            }
-            for dev in snap.bottleneckDevices {
-                let tag = localizer.L("[WARN]", "[瓶颈]")
-                print("\(tag) \(dev.negotiatedSpeedLabel)  \(dev.name) (\(dev.localizedBusName(localizer))) — \(dev.localizedDiagnosticDetail(localizer))")
-            }
-            return
-        }
-
-        let peakStr = BottleneckDiagnoser.formatSpeedGbps(snap.peakNegotiatedGbps, localizer: localizer)
-        print(localizer.L(
-            "Power: \(snap.power.localizedBadge(localizer)) | Peak Negotiated Link: \(peakStr)",
-            "供电状态：\(snap.power.localizedBadge(localizer)) | 最高协商链路：\(peakStr)"
-        ))
-        for dev in snap.devices {
-            let rate = dev.negotiatedSpeedLabel.padding(toLength: 10, withPad: " ", startingAt: 0)
-            let state = dev.verdict.localizedLabel(localizer).padding(toLength: 16, withPad: " ", startingAt: 0)
-            print("\(rate)  [\(state)]  \(dev.name) (\(dev.vendor)) — \(dev.localizedBusName(localizer))")
-        }
     }
 }

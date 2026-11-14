@@ -5,7 +5,7 @@ import SwiftUI
 
 public enum BusFilterMode: String, CaseIterable, Identifiable, Sendable {
     case all = "All attached devices"
-    case bottlenecks = "Cable bottlenecks"
+    case indeterminate = "Unverified ceiling"
     case thunderbolt = "Thunderbolt / USB4"
     case usbPeripherals = "USB peripherals"
 
@@ -15,7 +15,7 @@ public enum BusFilterMode: String, CaseIterable, Identifiable, Sendable {
     public func localizedTitle(_ localizer: AppLocalizer) -> String {
         switch self {
         case .all: return localizer.L("All attached devices", "全部连接设备")
-        case .bottlenecks: return localizer.L("Cable bottlenecks", "线材降速瓶颈")
+        case .indeterminate: return localizer.L("Unverified ceiling", "待确认速率上限")
         case .thunderbolt: return localizer.L("Thunderbolt / USB4", "雷雳 / USB4")
         case .usbPeripherals: return localizer.L("USB peripherals", "USB 外设")
         }
@@ -59,7 +59,7 @@ public final class BusLensMonitor: ObservableObject {
         snapshot.devices.filter { dev in
             switch filterMode {
             case .all: return true
-            case .bottlenecks: return dev.verdict == .cableOrHubBottleneck
+            case .indeterminate: return dev.verdict == .indeterminate
             case .thunderbolt: return dev.protocolKind == .thunderboltUSB4
             case .usbPeripherals: return dev.protocolKind == .usbHost
             }
@@ -71,23 +71,21 @@ public final class BusLensMonitor: ObservableObject {
     }
 
     public func localizedMenuBarLabel(_ localizer: AppLocalizer) -> String {
-        let warnCount = snapshot.bottleneckDevices.count
-        if warnCount > 0 {
-            return localizer.L("\(warnCount) bottleneck", "\(warnCount) 处瓶颈")
-        }
+        let prefix = isStaticPreview ? "[DEMO] " : ""
         let peak = snapshot.peakNegotiatedGbps
-        return peak > 0
+        let label = peak > 0
             ? BottleneckDiagnoser.formatSpeedGbps(peak)
             : localizer.L("Ports idle", "端口空闲")
+        return prefix + label
     }
 
-    // MARK: - Deterministic Hardware Bench Preview
+    // MARK: - Deterministic Demo Bench Preview (Explicit --demo / Screenshot Export Only)
 
     public static func preview() -> BusLensMonitor {
         let now = Date(timeIntervalSince1970: 1_794_556_800)
-        let tbSSD = AttachedBusDevice(
-            id: "tb1-nvme",
-            name: "TBU405Pro NVMe Enclosure",
+        let tbEnclosure = AttachedBusDevice(
+            id: "demo-tb1-enclosure",
+            name: "TBU405Pro Enclosure",
             vendor: "ACASIS",
             busName: "Thunderbolt / USB4 Bus 1",
             protocolKind: .thunderboltUSB4,
@@ -96,64 +94,64 @@ public final class BusLensMonitor: ObservableObject {
             portCeilingGbps: 40.0,
             depth: 0,
             modeDescription: "thunderbolt 3",
-            verdict: .optimalTunnel,
-            diagnosticDetail: "Active Thunderbolt / USB4 (40 Gb/s) PCIe tunnel — full storage & display throughput available."
+            verdict: .fullRate,
+            diagnosticDetail: "Negotiated at 40 Gb/s (full bus rate)."
         )
-        let throttledSSD = AttachedBusDevice(
-            id: "usb1-ssd-throttled",
-            name: "Portable SSD X9 Pro",
-            vendor: "Crucial",
-            busName: "USB 3.1 Bus #1",
-            protocolKind: .usbHost,
-            negotiatedSpeedLabel: "480 Mb/s",
-            negotiatedGbps: 0.48,
-            portCeilingGbps: 40.0,
-            depth: 0,
-            modeDescription: "direct root port",
-            verdict: .cableOrHubBottleneck,
-            diagnosticDetail: "Storage/dock trapped at USB 2.0 (480 Mb/s) — replace charge-only USB-C cable with certified 40 Gb/s USB4/TB4 cable."
-        )
-        let hubThrottledNVMe = AttachedBusDevice(
-            id: "usb1-asm2464",
-            name: "ASM2464PD USB4 NVMe Bridge",
+        let usb10GStorage = AttachedBusDevice(
+            id: "demo-usb1-10g",
+            name: "Portable Storage Bridge",
             vendor: "ASMedia",
-            busName: "USB 3.1 Bus #1",
+            busName: "USB 3.1 Bus (0x02000000)",
             protocolKind: .usbHost,
             negotiatedSpeedLabel: "10 Gb/s",
             negotiatedGbps: 10.0,
-            portCeilingGbps: 40.0,
-            depth: 1,
-            modeDescription: "via USB hub",
-            verdict: .cableOrHubBottleneck,
-            diagnosticDetail: "Negotiated 10 Gb/s (routed through intermediate USB hub); connect directly with a 40 Gb/s cable if enclosure supports USB4/TB3."
-        )
-        let captureCard = AttachedBusDevice(
-            id: "usb2-camlink",
-            name: "StreamCapture 4K60 UVC",
-            vendor: "Elgato",
-            busName: "USB 3.1 Bus #2",
-            protocolKind: .usbHost,
-            negotiatedSpeedLabel: "5 Gb/s",
-            negotiatedGbps: 5.0,
-            portCeilingGbps: 10.0,
+            portCeilingGbps: nil,
             depth: 0,
-            modeDescription: "direct root port",
-            verdict: .superSpeedOptimal,
-            diagnosticDetail: "Operating at USB 3 SuperSpeed (5 Gb/s)."
+            modeDescription: "direct host bus",
+            verdict: .indeterminate,
+            diagnosticDetail: "Negotiated at 10 Gb/s; cannot determine if cable/hub-limited without device max capability."
         )
-        let keyboardHID = AttachedBusDevice(
-            id: "usb2-kb",
-            name: "Hall-Effect 60HE Analog Keyboard",
-            vendor: "Wooting",
-            busName: "USB 3.1 Bus #2",
+        let usb480Device = AttachedBusDevice(
+            id: "demo-usb1-480m",
+            name: "USB-C External Drive",
+            vendor: "Generic",
+            busName: "USB 3.1 Bus (0x02000000)",
             protocolKind: .usbHost,
             negotiatedSpeedLabel: "480 Mb/s",
             negotiatedGbps: 0.48,
-            portCeilingGbps: 10.0,
+            portCeilingGbps: nil,
             depth: 1,
-            modeDescription: "via USB hub",
-            verdict: .hidOptimal,
-            diagnosticDetail: "Dedicated USB 2.0 lane (480 Mb/s) — expected for HID / low-latency peripherals."
+            modeDescription: "via external USB hub",
+            verdict: .indeterminate,
+            diagnosticDetail: "Negotiated at 480 Mb/s; cannot determine if cable/hub-limited without device max capability."
+        )
+        let captureCard = AttachedBusDevice(
+            id: "demo-usb2-uvc",
+            name: "StreamCapture 4K60 UVC",
+            vendor: "Elgato",
+            busName: "USB 3.1 Bus (0x01000000)",
+            protocolKind: .usbHost,
+            negotiatedSpeedLabel: "5 Gb/s",
+            negotiatedGbps: 5.0,
+            portCeilingGbps: nil,
+            depth: 0,
+            modeDescription: "direct host bus",
+            verdict: .indeterminate,
+            diagnosticDetail: "Negotiated at 5 Gb/s; cannot determine if cable/hub-limited without device max capability."
+        )
+        let keyboardHID = AttachedBusDevice(
+            id: "demo-usb2-kb",
+            name: "Hall-Effect 60HE Analog Keyboard",
+            vendor: "Wooting",
+            busName: "USB 3.1 Bus (0x01000000)",
+            protocolKind: .usbHost,
+            negotiatedSpeedLabel: "480 Mb/s",
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            depth: 0,
+            modeDescription: "direct host bus",
+            verdict: .lowSpeedPeripheral,
+            diagnosticDetail: "Negotiated at 480 Mb/s — normal for HID / low-latency peripherals."
         )
 
         let controllers: [PhysicalPortController] = [
@@ -175,11 +173,11 @@ public final class BusLensMonitor: ObservableObject {
                 maxGbps: 40.0,
                 negotiatedGbps: 40.0,
                 isConnected: true,
-                devices: [tbSSD]
+                devices: [tbEnclosure]
             ),
             PhysicalPortController(
                 id: "c2",
-                title: "Thunderbolt / USB4 Bus 2",
+                title: "Thunderbolt / USB4 Bus 3",
                 protocolKind: .thunderboltUSB4,
                 maxRateLabel: "40 Gb/s",
                 maxGbps: 40.0,
@@ -189,20 +187,18 @@ public final class BusLensMonitor: ObservableObject {
             ),
             PhysicalPortController(
                 id: "u1",
-                title: "USB 3.1 Bus #1",
+                title: "USB 3.1 Bus (0x02000000)",
                 protocolKind: .usbHost,
-                maxRateLabel: "10 Gb/s",
-                maxGbps: 10.0,
+                maxGbps: nil,
                 negotiatedGbps: 10.0,
                 isConnected: true,
-                devices: [hubThrottledNVMe, throttledSSD]
+                devices: [usb10GStorage, usb480Device]
             ),
             PhysicalPortController(
                 id: "u2",
-                title: "USB 3.1 Bus #2",
+                title: "USB 3.1 Bus (0x01000000)",
                 protocolKind: .usbHost,
-                maxRateLabel: "10 Gb/s",
-                maxGbps: 10.0,
+                maxGbps: nil,
                 negotiatedGbps: 5.0,
                 isConnected: true,
                 devices: [captureCard, keyboardHID]
@@ -212,7 +208,7 @@ public final class BusLensMonitor: ObservableObject {
         let snap = BusTopologySnapshot(
             capturedAt: now,
             controllers: controllers,
-            devices: [tbSSD, hubThrottledNVMe, throttledSSD, captureCard, keyboardHID],
+            devices: [tbEnclosure, usb10GStorage, usb480Device, captureCard, keyboardHID],
             power: PowerDeliverySummary(powerSource: "USB-C PD", negotiatedWatts: 140, lowPowerMode: false)
         )
         return BusLensMonitor(snapshot: snap, isStaticPreview: true, autoRefreshSeconds: nil)

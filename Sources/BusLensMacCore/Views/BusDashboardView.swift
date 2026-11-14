@@ -76,9 +76,20 @@ public struct BusDashboardView: View {
                     .font(.system(size: 17, weight: .bold))
                     .tracking(-0.35)
                     .foregroundStyle(BenchTheme.ink)
+                if monitor.isStaticPreview {
+                    Text(localizer.L("[DEMO]", "[演示数据]"))
+                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(BenchTheme.signalOrange)
+                        )
+                }
                 Text(localizer.L(
-                    "Thunderbolt, USB4 & USB-C physical link-rate schematic and cable bottleneck analyzer",
-                    "雷雳、USB4 与 USB-C 物理协商速率面板及线材降速瓶颈诊断仪"
+                    "Thunderbolt, USB4 & USB-C negotiated link-speed inspector",
+                    "雷雳、USB4 与 USB-C 协商链路速率检视台"
                 ))
                 .font(.system(size: 12.5))
                 .foregroundStyle(BenchTheme.muted)
@@ -136,12 +147,13 @@ public struct BusDashboardView: View {
             )
             verticalSeam
             readoutCell(
-                value: "\(monitor.snapshot.bottleneckDevices.count)",
-                label: localizer.L("Cable or hub bottlenecks", "线材或扩展坞瓶颈"),
-                detail: monitor.snapshot.bottleneckDevices.isEmpty
-                    ? localizer.L("All enclosures at link ceiling", "所有外设均达物理速率上限")
-                    : localizer.L("Below enclosure link ceiling", "低于外设物理速率上限"),
-                color: monitor.snapshot.bottleneckDevices.isEmpty ? BenchTheme.pine : BenchTheme.signalOrange
+                value: "\(monitor.snapshot.devices.count)",
+                label: localizer.L("Attached peripherals", "已连接外设总数"),
+                detail: localizer.L(
+                    "\(monitor.snapshot.indeterminateDevices.count) unverified ceiling",
+                    "\(monitor.snapshot.indeterminateDevices.count) 台速率上限待确认"
+                ),
+                color: BenchTheme.ink
             )
             verticalSeam
             readoutCell(
@@ -195,14 +207,13 @@ public struct BusDashboardView: View {
     private var receptacleMatrixStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(localizer.L("Rear I/O controller port schematic", "机身 I/O 控制器物理端口示意图"))
+                Text(localizer.L("Host bus & controller schematic", "主机总线与控制器拓扑视图"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(BenchTheme.ink)
                 Spacer()
                 HStack(spacing: 14) {
-                    legendPip(color: BenchTheme.ledBlue, text: localizer.L("40 Gb/s tunnel", "40 Gb/s 满速隧道"))
-                    legendPip(color: BenchTheme.ledMint, text: localizer.L("USB3 SuperSpeed", "USB3 超高速"))
-                    legendPip(color: BenchTheme.ledOrange, text: localizer.L("Bottleneck downstream", "下游存在降速瓶颈"))
+                    legendPip(color: BenchTheme.ledBlue, text: localizer.L("Full bus rate", "满速隧道"))
+                    legendPip(color: BenchTheme.ledMint, text: localizer.L("Active USB / TB link", "活跃协商链路"))
                 }
             }
 
@@ -230,13 +241,13 @@ public struct BusDashboardView: View {
     }
 
     private func physicalPortModule(_ ctrl: PhysicalPortController, index: Int) -> some View {
-        let hasWarn = ctrl.devices.contains { $0.verdict == .cableOrHubBottleneck }
+        let hasWarn = ctrl.devices.contains { $0.verdict.isWarning }
         let isTB = ctrl.protocolKind == .thunderboltUSB4
         let ledColor: Color = hasWarn
             ? BenchTheme.ledOrange
             : (ctrl.isConnected ? (ctrl.negotiatedGbps >= 40.0 ? BenchTheme.ledBlue : BenchTheme.ledMint) : BenchTheme.portRim)
 
-        let shortBusCode = isTB ? "TB4 · P\(index)" : "USB · U\(index)"
+        let shortBusCode = isTB ? "TB · B\(index)" : "USB · C\(index)"
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
@@ -281,14 +292,15 @@ public struct BusDashboardView: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.94))
                     .lineLimit(1)
+                let maxLabel = ctrl.localizedMaxRateLabel(localizer)
                 Text(ctrl.isConnected
                      ? localizer.L(
-                        "\(ctrl.devices.count) dev · max \(ctrl.maxRateLabel)",
-                        "\(ctrl.devices.count) 台设备 · 上限 \(ctrl.maxRateLabel)"
+                        "\(ctrl.devices.count) dev · ceiling \(maxLabel)",
+                        "\(ctrl.devices.count) 台设备 · 上限 \(maxLabel)"
                      )
                      : localizer.L(
-                        "Idle · max \(ctrl.maxRateLabel)",
-                        "未连接 · 上限 \(ctrl.maxRateLabel)"
+                        "Idle · ceiling \(maxLabel)",
+                        "未连接 · 上限 \(maxLabel)"
                      ))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(BenchTheme.portSilk)
@@ -322,11 +334,7 @@ public struct BusDashboardView: View {
                                 .foregroundStyle(active ? BenchTheme.ink : BenchTheme.muted)
                             Text(verbatim: "\(count(for: mode))")
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(
-                                    mode == .bottlenecks && count(for: mode) > 0
-                                        ? BenchTheme.signalOrange
-                                        : (active ? BenchTheme.cobalt : BenchTheme.subtle)
-                                )
+                                .foregroundStyle(active ? BenchTheme.cobalt : BenchTheme.subtle)
                         }
                         .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10)
@@ -373,7 +381,7 @@ public struct BusDashboardView: View {
     private func count(for mode: BusFilterMode) -> Int {
         switch mode {
         case .all: return monitor.snapshot.devices.count
-        case .bottlenecks: return monitor.snapshot.bottleneckDevices.count
+        case .indeterminate: return monitor.snapshot.indeterminateDevices.count
         case .thunderbolt: return monitor.snapshot.devices.filter { $0.protocolKind == .thunderboltUSB4 }.count
         case .usbPeripherals: return monitor.snapshot.devices.filter { $0.protocolKind == .usbHost }.count
         }
@@ -383,13 +391,13 @@ public struct BusDashboardView: View {
 
     private var benchColumnHeader: some View {
         HStack(spacing: 12) {
-            Text(localizer.L("Attached peripheral & diagnostic", "已连接外设与链路诊断建议"))
+            Text(localizer.L("Attached peripheral & link note", "已连接外设与协商说明"))
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(localizer.L("Controller topology", "控制器拓扑路径"))
                 .frame(width: 186, alignment: .leading)
-            Text(localizer.L("Link verdict", "链路健康判定"))
-                .frame(width: 158, alignment: .leading)
-            Text(localizer.L("Negotiated vs port ceiling", "协商速率 / 端口上限"))
+            Text(localizer.L("Link verdict", "链路速率结论"))
+                .frame(width: 196, alignment: .leading)
+            Text(localizer.L("Negotiated vs bus ceiling", "协商速率 / 总线上限"))
                 .frame(width: 178, alignment: .trailing)
         }
         .font(.system(size: 11, weight: .semibold))
@@ -453,7 +461,7 @@ public struct BusDashboardView: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(BenchTheme.ink)
                         .lineLimit(1)
-                    Text(dev.vendor)
+                    Text(dev.localizedVendor(localizer))
                         .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(BenchTheme.subtle)
                 }
@@ -489,7 +497,7 @@ public struct BusDashboardView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .frame(width: 158, alignment: .leading)
+            .frame(width: 196, alignment: .leading)
 
             // Negotiated Speed + Segmented Lane Gauge
             VStack(alignment: .trailing, spacing: 4) {
@@ -497,7 +505,7 @@ public struct BusDashboardView: View {
                     Text(verbatim: dev.negotiatedSpeedLabel)
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
-                    Text(verbatim: "/ \(BottleneckDiagnoser.formatSpeedGbps(dev.portCeilingGbps))")
+                    Text(verbatim: "/ \(dev.localizedPortCeilingLabel(localizer))")
                         .font(.system(size: 10.5, design: .monospaced))
                         .foregroundStyle(BenchTheme.subtle)
                 }
@@ -506,9 +514,11 @@ public struct BusDashboardView: View {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(BenchTheme.recessed)
                         .frame(width: 148, height: 5)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(dev.verdict.color)
-                        .frame(width: max(6, 148 * CGFloat(dev.utilizationFraction)), height: 5)
+                    if let fraction = dev.utilizationFraction {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(dev.verdict.color)
+                            .frame(width: max(6, 148 * CGFloat(fraction)), height: 5)
+                    }
                 }
             }
             .frame(width: 178, alignment: .trailing)
