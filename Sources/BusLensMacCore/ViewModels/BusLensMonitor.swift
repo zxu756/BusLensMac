@@ -139,19 +139,19 @@ public final class BusLensMonitor: ObservableObject {
             verdict: .indeterminate,
             diagnosticDetail: "Negotiated at 5 Gb/s; cannot determine if cable/hub-limited without device max capability."
         )
-        let keyboardHID = AttachedBusDevice(
-            id: "demo-usb2-kb",
-            name: "Hall-Effect 60HE Analog Keyboard",
-            vendor: "Wooting",
+        let usb1Receiver = AttachedBusDevice(
+            id: "demo-usb1-12m",
+            name: "USB 1.1 Full-Speed Receiver",
+            vendor: "Generic",
             busName: "USB 3.1 Bus (0x01000000)",
             protocolKind: .usbHost,
-            negotiatedSpeedLabel: "480 Mb/s",
-            negotiatedGbps: 0.48,
+            negotiatedSpeedLabel: "12 Mb/s",
+            negotiatedGbps: 0.012,
             portCeilingGbps: nil,
             depth: 0,
             modeDescription: "direct host bus",
             verdict: .lowSpeedPeripheral,
-            diagnosticDetail: "Negotiated at 480 Mb/s — normal for HID / low-latency peripherals."
+            diagnosticDetail: "Negotiated at 12 Mb/s (USB 1.x link rate)."
         )
 
         let controllers: [PhysicalPortController] = [
@@ -201,14 +201,14 @@ public final class BusLensMonitor: ObservableObject {
                 maxGbps: nil,
                 negotiatedGbps: 5.0,
                 isConnected: true,
-                devices: [captureCard, keyboardHID]
+                devices: [captureCard, usb1Receiver]
             )
         ]
 
         let snap = BusTopologySnapshot(
             capturedAt: now,
             controllers: controllers,
-            devices: [tbEnclosure, usb10GStorage, usb480Device, captureCard, keyboardHID],
+            devices: [tbEnclosure, usb10GStorage, usb480Device, captureCard, usb1Receiver],
             power: PowerDeliverySummary(powerSource: "USB-C PD", negotiatedWatts: 140, lowPowerMode: false)
         )
         return BusLensMonitor(snapshot: snap, isStaticPreview: true, autoRefreshSeconds: nil)

@@ -16,18 +16,22 @@ if [[ ! -x "$BIN" ]]; then
     exit 1
 fi
 
+DISPLAY_BIN="${BIN/#$ROOT/<REPO_ROOT>}"
+
 echo "=== BusLens Mac M0 Acceptance Gate ==="
 echo "Date (UTC): $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "Host: $(sw_vers -productName) $(sw_vers -productVersion) ($(sw_vers -buildVersion)) $(uname -m)"
-echo "Binary: $BIN"
+echo "Binary: $DISPLAY_BIN"
 echo ""
 
 python3 - "$ROOT" "$BIN" <<'PY'
-import glob
+from __future__ import annotations
+import hashlib
 import json
 import os
 import pathlib
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -38,11 +42,34 @@ root = pathlib.Path(sys.argv[1])
 bin_path = sys.argv[2]
 host_fixture = root / "Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json"
 
-def run_cmd(args):
+def run_cmd(args, cwd=None, env=None):
     t0 = time.perf_counter()
-    proc = subprocess.run(args, capture_output=True, text=True)
+    proc = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True)
     dt_ms = (time.perf_counter() - t0) * 1000.0
     return proc.returncode, proc.stdout, proc.stderr, dt_ms
+
+def snapshot_preferences(prefs_dir: pathlib.Path) -> tuple[int, str, dict[str, str]]:
+    if not prefs_dir.exists():
+        return 0, hashlib.sha256(b"missing").hexdigest(), {}
+    entries = sorted(p for p in prefs_dir.iterdir() if p.is_file() or p.is_symlink())
+    digest = hashlib.sha256()
+    per_file: dict[str, str] = {}
+    for p in entries:
+        digest.update(p.name.encode("utf-8"))
+        digest.update(b"\0")
+        try:
+            fh = hashlib.sha256(p.read_bytes()).hexdigest()
+            digest.update(bytes.fromhex(fh))
+            per_file[p.name] = fh
+        except PermissionError:
+            st = p.lstat()
+            tag = f"perm:{st.st_size}:{st.st_mtime_ns}"
+            digest.update(tag.encode("utf-8"))
+            per_file[p.name] = tag
+        except FileNotFoundError:
+            continue
+        digest.update(b"\n")
+    return len(per_file), digest.hexdigest(), per_file
 
 # Extract live serials/UUIDs from system_profiler (read-only) to verify zero leakage
 live_secrets = set()
@@ -88,7 +115,7 @@ for idx in range(50):
     expected_lang = "en" if lang == "en" else "zh-Hans"
     assert parsed.get("language") == expected_lang, f"Row 1 expected language {expected_lang}, got {parsed.get('language')}"
     for secret in live_secrets:
-        assert secret.lower() not in out.lower(), f"Row 1 leaked hardware identifier in CLI JSON output"
+        assert secret.lower() not in out.lower(), "Row 1 leaked hardware identifier in CLI JSON output"
     durations_ms.append(dt_ms)
 
 print(
@@ -115,7 +142,7 @@ assert rc_def == 2 and out_def == "" and "bogus" in err_def
 print("[PASS] Row 2: `--cli bogus` (--lang en, --lang zh, default) exited with code 2, 0-byte stdout, localized stderr")
 
 # ---------------------------------------------------------------------------
-# Row 3: Synthetic TB device 20 Gb/s on 40 Gb/s bus (+ daisy-chain 20 Gb/s)
+# Row 3 & Row 4 & Supplemental U9 / U10 / U11 / U12 Synthetic Fixtures
 # ---------------------------------------------------------------------------
 with tempfile.TemporaryDirectory() as tmpdir:
     tmp = pathlib.Path(tmpdir)
@@ -237,6 +264,131 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
     print("[PASS] Row 4: Synthetic Samsung T7 at 10 Gb/s is indeterminate (ceiling Unknown/未知), never flagged throttled or told to replace cable in EN & ZH")
 
+    # -----------------------------------------------------------------------
+    # Supplemental U9: 480 Mb/s "Groups Backup Drive", "Hidden Disk", "Wooting 60HE"
+    # -----------------------------------------------------------------------
+    u9_path = tmp / "u9_no_name_guessing.json"
+    u9_path.write_text(json.dumps({
+        "SPUSBDataType": [{
+            "_name": "USB 3.1 Bus",
+            "host_controller_speed": "Up to 10 Gb/s",
+            "_items": [
+                {"_name": "Groups Backup Drive", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
+                {"_name": "Hidden Disk", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
+                {"_name": "Wooting 60HE", "manufacturer": "Wooting", "speed": "Up to 480 Mb/s"},
+                {"_name": "USB 1.0 Device", "manufacturer": "Generic", "speed": "Up to 1.5 Mb/s"},
+                {"_name": "USB 1.1 Receiver", "manufacturer": "Generic", "speed": "Up to 12 Mb/s"}
+            ]
+        }]
+    }), encoding="utf-8")
+
+    for lang, exp_indet_lbl, exp_low_lbl in [
+        ("en", "Indeterminate", "Low-speed peripheral"),
+        ("zh", "无法判断是否被限速", "低速外设（USB 1.x）"),
+    ]:
+        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u9_path), "--json", "--lang", lang])
+        assert rc_j == 0 and err_j == ""
+        pj = json.loads(out_j)
+        by_name = {d["name"]: d for d in pj["devices"]}
+        for dev_name in ("Groups Backup Drive", "Hidden Disk", "Wooting 60HE"):
+            assert by_name[dev_name]["verdict"] == "indeterminate", f"U9 ({lang}) {dev_name} misclassified: {by_name[dev_name]}"
+            assert by_name[dev_name]["verdictLabel"] == exp_indet_lbl
+        for dev_name in ("USB 1.0 Device", "USB 1.1 Receiver"):
+            assert by_name[dev_name]["verdict"] == "low_speed_peripheral"
+            assert by_name[dev_name]["verdictLabel"] == exp_low_lbl
+
+    # Verify zero keyboard/mouse brand substrings in Sources/
+    brand_re = re.compile(r"wooting|keychron|logitech|ajazz", flags=re.I)
+    for swift_file in (root / "Sources").rglob("*.swift"):
+        m = brand_re.search(swift_file.read_text(encoding="utf-8"))
+        assert m is None, f"U9 found brand keyword {m.group(0)!r} in {swift_file}"
+
+    print("[PASS] U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', 'Wooting 60HE' -> Indeterminate / 无法判断是否被限速; only USB 1.x (1.5/12 Mb/s) -> Low-speed peripheral; 0 brand hints in Sources/")
+
+    # -----------------------------------------------------------------------
+    # Supplemental U10: 480 Mb/s "Hubble Backup Drive" preserved in device list
+    # -----------------------------------------------------------------------
+    u10_path = tmp / "u10_hubble_drive.json"
+    u10_path.write_text(json.dumps({
+        "SPUSBDataType": [{
+            "_name": "USB 3.1 Bus",
+            "host_controller_speed": "Up to 10 Gb/s",
+            "_items": [
+                {"_name": "Hubble Backup Drive", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"}
+            ]
+        }]
+    }), encoding="utf-8")
+
+    for lang in ("en", "zh"):
+        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u10_path), "--json", "--lang", lang])
+        assert rc_j == 0 and err_j == ""
+        pj = json.loads(out_j)
+        assert len(pj["devices"]) == 1 and pj["devices"][0]["name"] == "Hubble Backup Drive"
+        assert pj["devices"][0]["verdict"] == "indeterminate"
+        rc_t, out_t, _, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u10_path), "--lang", lang])
+        assert rc_t == 0 and "Hubble Backup Drive" in out_t
+
+    print("[PASS] U10: 480 Mb/s leaf 'Hubble Backup Drive' preserved in CLI JSON and text output (never hidden by 'hub' substring)")
+
+    # -----------------------------------------------------------------------
+    # Supplemental U11: Sibling TB bus without speed reports Unknown / 未知
+    # -----------------------------------------------------------------------
+    u11_path = tmp / "u11_sibling_tb.json"
+    u11_path.write_text(json.dumps({
+        "SPThunderboltDataType": [
+            {
+                "_name": "thunderboltusb4_bus_0",
+                "vendor_name_key": "Apple Inc.",
+                "device_name_key": "Mac mini",
+                "receptacle_1_tag": {
+                    "current_speed_key": "Up to 40 Gb/s",
+                    "receptacle_status_key": "receptacle_no_devices_connected"
+                }
+            },
+            {
+                "_name": "thunderboltusb4_bus_1",
+                "vendor_name_key": "Apple Inc.",
+                "device_name_key": "Mac mini",
+                "receptacle_1_tag": {
+                    "receptacle_status_key": "receptacle_no_devices_connected"
+                }
+            }
+        ]
+    }), encoding="utf-8")
+
+    for lang, exp_unknown in [("en", "Unknown"), ("zh", "未知")]:
+        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u11_path), "--json", "--lang", lang])
+        assert rc_j == 0 and err_j == ""
+        pj = json.loads(out_j)
+        ctrls = {c["id"]: c for c in pj["controllers"]}
+        assert ctrls["tb::thunderboltusb4_bus_0"]["ceilingGbps"] == 40.0
+        assert ctrls["tb::thunderboltusb4_bus_1"]["ceilingGbps"] is None
+        assert ctrls["tb::thunderboltusb4_bus_1"]["ceilingLabel"] == exp_unknown
+
+    print("[PASS] U11: Sibling Thunderbolt bus omitting speed reports ceilingGbps=null / Unknown / 未知 (no cross-bus ceiling copy)")
+
+    # -----------------------------------------------------------------------
+    # Supplemental U12: Missing SPPowerDataType reports Unknown / 未知
+    # -----------------------------------------------------------------------
+    u12_path = tmp / "u12_empty_power.json"
+    u12_path.write_text(json.dumps({"SPPowerDataType": []}), encoding="utf-8")
+
+    for lang, exp_unknown, exp_line in [
+        ("en", "Unknown", "Power: Unknown (Low Power Mode: Unknown)"),
+        ("zh", "未知", "供电状态：未知（低电量模式：未知）"),
+    ]:
+        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u12_path), "--json", "--lang", lang])
+        assert rc_j == 0 and err_j == ""
+        pj = json.loads(out_j)
+        assert pj["power"]["powerSource"] is None
+        assert pj["power"]["lowPowerMode"] is None
+        assert pj["power"]["localizedBadge"] == exp_unknown
+        assert pj["power"]["lowPowerModeLabel"] == exp_unknown
+        rc_t, out_t, _, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u12_path), "--lang", lang])
+        assert rc_t == 0 and exp_line in out_t
+
+    print("[PASS] U12: Missing SPPowerDataType reports powerSource=null, lowPowerMode=null, and Unknown / 未知 in EN & ZH")
+
 # ---------------------------------------------------------------------------
 # Row 5: Scrubbed real host fixture (3 devices, speeds match fixture, 0 leaks)
 # ---------------------------------------------------------------------------
@@ -245,10 +397,9 @@ fixture_text = host_fixture.read_text(encoding="utf-8")
 for secret in live_secrets:
     assert secret.lower() not in fixture_text.lower(), "Row 5 host_macmini_scrubbed.json contains live hardware identifier!"
 
-fixture_obj = json.loads(fixture_text)
 expected_devices = {
-    "TBU405Pro": ("40 Gb/s", "full_rate", 40.0, False),
-    "Wooting 60HE v2": ("480 Mb/s", "low_speed_peripheral", None, False),
+    "TBU405Pro": ("40 Gb/s", "full_rate", None, False),
+    "Wooting 60HE v2": ("480 Mb/s", "indeterminate", None, False),
     "AJAZZ AJ159 APEX": ("12 Mb/s", "low_speed_peripheral", None, False),
 }
 
@@ -270,45 +421,194 @@ for lang in ("en", "zh"):
     rc_t, out_t, _, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(host_fixture), "--lang", lang])
     assert rc_t == 0
     if lang == "en":
-        assert "[HID / low-latency peripheral]" in out_t, "Row 5 EN truncated HID label!"
-        assert "HID / low-latenc]" not in out_t
+        assert "[Low-speed peripheral]" in out_t, "Row 5 EN truncated Low-speed peripheral label!"
+        assert "[Indeterminate" in out_t
     else:
-        assert "低速外设（正常）" in out_t
+        assert "低速外设（USB 1.x）" in out_t
+        assert "无法判断是否被限速" in out_t
 
-# Also verify Sources/ contains zero storage keyword guesses
+# Verify Sources/ contains zero storage keyword guesses and preserves receptacle_upstream_ambiguous_tag
 for swift_file in (root / "Sources").rglob("*.swift"):
     src = swift_file.read_text(encoding="utf-8").lower()
     for banned in ('"t7"', '"extreme pro"', 'replace charge-only', '"receptacle_upstream_ambiguous_tag"'):
         if swift_file.name == "BusProfilerCollector.swift" and banned == '"receptacle_upstream_ambiguous_tag"':
-            # Allowed in findFirstReceptacle / findDeviceReceptacle, forbidden in redactedKeys
             redacted_match = re.search(r"redactedkeys.*?\]", src, flags=re.S)
             assert redacted_match and "receptacle_upstream_ambiguous_tag" not in redacted_match.group(0)
         else:
             assert banned not in src, f"Banned token {banned} found in {swift_file}"
 
-print("[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s, 480 Mb/s, 12 Mb/s) matching raw speeds, 0 internal-hub false positives, 0 identifier leaks")
+print("[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s full_rate, 480 Mb/s indeterminate, 12 Mb/s low_speed_peripheral), 0 internal-hub false positives, 0 identifier leaks")
 
 # ---------------------------------------------------------------------------
-# Row 6: `swift test` leaves zero new `BusLensMacTests.*` in ~/Library/Preferences
+# Row 6: `swift test --no-parallel` leaves ~/Library/Preferences count & sha256 identical
 # ---------------------------------------------------------------------------
 prefs_dir = pathlib.Path.home() / "Library/Preferences"
-before_files = set(glob.glob(str(prefs_dir / "BusLensMacTests.*")))
-before_app_plist_mtime = None
-app_plist = prefs_dir / "local.xu.BusLensMac.plist"
-if app_plist.exists():
-    before_app_plist_mtime = app_plist.stat().st_mtime_ns
+matched_prefs = False
+for attempt in range(1, 4):
+    before_count, before_sha, before_map = snapshot_preferences(prefs_dir)
+    st = subprocess.run(["swift", "test", "--no-parallel"], cwd=str(root), capture_output=True, text=True)
+    assert st.returncode == 0, f"Row 6 `swift test --no-parallel` failed:\n{st.stdout}\n{st.stderr}"
+    after_count, after_sha, after_map = snapshot_preferences(prefs_dir)
 
-st = subprocess.run(["swift", "test", "--no-parallel"], cwd=str(root), capture_output=True, text=True)
-assert st.returncode == 0, f"Row 6 `swift test --no-parallel` failed:\n{st.stdout}\n{st.stderr}"
+    before_buslens = {k: v for k, v in before_map.items() if "buslens" in k.lower()}
+    after_buslens = {k: v for k, v in after_map.items() if "buslens" in k.lower()}
+    assert before_buslens == after_buslens, (
+        f"Row 6 `swift test` mutated BusLens Preferences files: before={before_buslens}, after={after_buslens}"
+    )
 
-after_files = set(glob.glob(str(prefs_dir / "BusLensMacTests.*")))
-new_files = sorted(after_files - before_files)
-assert len(new_files) == 0, f"Row 6 `swift test` created leftover Preferences files: {new_files}"
-if before_app_plist_mtime is not None and app_plist.exists():
-    assert app_plist.stat().st_mtime_ns == before_app_plist_mtime, "Row 6 `swift test` modified local.xu.BusLensMac.plist"
-else:
-    assert not app_plist.exists(), "Row 6 `swift test` created local.xu.BusLensMac.plist"
+    if before_count == after_count and before_sha == after_sha:
+        matched_prefs = True
+        break
 
-print(f"[PASS] Row 6: `swift test --no-parallel` passed with 0 new `BusLensMacTests.*` files in ~/Library/Preferences (before={len(before_files)}, after={len(after_files)}, added=0)")
-print("\n=== ALL 6 M0 ACCEPTANCE ROWS PASSED ===")
+    diff_names = sorted(
+        (set(before_map) ^ set(after_map))
+        | {k for k in (set(before_map) & set(after_map)) if before_map[k] != after_map[k]}
+    )
+    # Only retry if an unrelated macOS system daemon (com.apple.* / ContextStoreAgent.plist) flushed concurrently
+    if not all(n.startswith("com.apple.") or n == "ContextStoreAgent.plist" for n in diff_names):
+        raise AssertionError(
+            f"Row 6 `swift test` mutated ~/Library/Preferences ({diff_names}): "
+            f"before=({before_count}, {before_sha[:12]}), after=({after_count}, {after_sha[:12]})"
+        )
+
+assert matched_prefs, (
+    f"Row 6 could not observe a quiet ~/Library/Preferences window across 3 runs; last diff={diff_names}"
+)
+
+print(f"[PASS] Row 6: `swift test --no-parallel` passed with 0 changes to ~/Library/Preferences (files={after_count}, sha256={after_sha[:12]}... identical)")
+
+# ---------------------------------------------------------------------------
+# W1: Scripted Mutation Checks in an Isolated Temporary Copy
+# ---------------------------------------------------------------------------
+mutations = [
+    (
+        "M1 (U1: redact receptacle_upstream_ambiguous_tag)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        '"switch_uid_key"',
+        '"switch_uid_key",\n        "receptacle_upstream_ambiguous_tag"',
+        "CollectorTests/testThunderboltPerDeviceSpeedPreservedOn40GbpsBus",
+        "U1 / Row 3: Preserves receptacle_upstream_ambiguous_tag",
+    ),
+    (
+        "M2 (U2: blame cable with 40 Gb/s advice on Indeterminate)",
+        "Sources/BusLensMacCore/Diagnostics/BottleneckDiagnoser.swift",
+        '"Negotiated at \\(rate); cannot determine if cable/hub-limited without device max capability."',
+        '"Negotiated at \\(rate); bottleneck detected — replace cable with 40 Gb/s lead."',
+        "DiagnoserTests/testSamsungT7Native10GbpsNotFlaggedAsBottleneck",
+        "U2 / Row 4: Samsung T7 at 10 Gb/s",
+    ),
+    (
+        "M3 (U3: fabricate 10 Gb/s USB controller ceiling when missing)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        "private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {",
+        'private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {\n        if usbBus["host_controller_speed"] == nil { return 10.0 }',
+        "CollectorTests/testUnknownBusCeilingsAreNotFabricated",
+        "U3: Unknown Thunderbolt and USB bus ceilings",
+    ),
+    (
+        "M4 (U5: disable Apple Built-in USB hub recognition)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        "private static func isBuiltInUSBNode(_ item: [String: Any]) -> Bool {",
+        "private static func isBuiltInUSBNode(_ item: [String: Any]) -> Bool {\n        if !item.isEmpty { return false }",
+        "CollectorTests/testRealHostMacMiniScrubbedFixtureAndInternalHubHandling",
+        "U5 & Row 5: Scrubbed Mac mini host fixture",
+    ),
+    (
+        "M5 (U6: return exitCode 0 instead of 2 on unknown CLI subcommand)",
+        "Sources/BusLensMacCore/CLI/BusCLIRunner.swift",
+        '        default:\n            return BusCLIExecutionResult(\n                exitCode: 2,',
+        '        default:\n            return BusCLIExecutionResult(\n                exitCode: 0,',
+        "CLITests/testUnknownSubcommandAndOptionsExitWithCode2",
+        "U6 / Row 2: Unknown CLI subcommand",
+    ),
+    (
+        "M6 (U8: drop string 'yes' from Low Power Mode boolean parser)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        'case "1", "yes", "true", "on", "enabled", "sppower_low_power_mode_enabled":',
+        'case "1", "true", "on", "enabled", "sppower_low_power_mode_enabled":',
+        "CollectorTests/testLowPowerModeStringIntegerAndPmsetParsing",
+        "U8: Low Power Mode accepts string",
+    ),
+    (
+        "M7 (U9: reintroduce 'ups'/'hid' product-name guessing for lowSpeedPeripheral)",
+        "Sources/BusLensMacCore/Diagnostics/BottleneckDiagnoser.swift",
+        "if protocolKind == .usbHost && negotiatedGbps > 0 && negotiatedGbps <= usb1FullSpeedMaxGbps {",
+        'if protocolKind == .usbHost && negotiatedGbps > 0 && (negotiatedGbps <= usb1FullSpeedMaxGbps || name.lowercased().contains("ups") || name.lowercased().contains("hid")) {',
+        "DiagnoserTests/testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps",
+        "U9: 480 Mb/s 'Groups Backup Drive'",
+    ),
+    (
+        "M8 (U10: reintroduce name.contains('hub') hiding Hubble Backup Drive)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty",
+        'let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty || name.lowercased().contains("hub")',
+        "CollectorTests/testHubbleBackupDriveNotHiddenByHubSubstring",
+        "U10: Leaf USB devices containing 'hub'",
+    ),
+    (
+        "M9 (U11: fabricate 40 Gb/s ceiling on sibling Thunderbolt bus omitting speed)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        "let ceilingGbps = explicitReceptacleCeilingGbps(in: rec)",
+        "let ceilingGbps = explicitReceptacleCeilingGbps(in: rec) ?? 40.0",
+        "CollectorTests/testSiblingThunderboltBusDoesNotCopyCeiling",
+        "U11: Sibling Thunderbolt bus omitting speed",
+    ),
+    (
+        "M10 (U12: default missing power telemetry to AC Power & Low Power Mode false)",
+        "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
+        "return PowerDeliverySummary(powerSource: source, negotiatedWatts: watts, lowPowerMode: lowPower)",
+        'return PowerDeliverySummary(powerSource: source ?? "AC Power", negotiatedWatts: watts, lowPowerMode: lowPower ?? false)',
+        "CollectorTests/testMissingPowerTelemetryReportsUnknownNotACPowerOrFalse",
+        "U12: Missing SPPowerDataType and empty pmset",
+    ),
+]
+
+with tempfile.TemporaryDirectory(prefix="buslens-m0-mut-") as mut_root_raw:
+    mut_root = pathlib.Path(mut_root_raw)
+    mut_repo = mut_root / "repo"
+    mut_repo.mkdir(parents=True)
+    shutil.copy2(root / "Package.swift", mut_repo / "Package.swift")
+    shutil.copytree(root / "Sources", mut_repo / "Sources")
+    shutil.copytree(root / "Tests", mut_repo / "Tests")
+
+    mut_env = os.environ.copy()
+    mut_env.pop("BUSLENS_BIN", None)
+
+    for mut_id, rel_file, target_str, replacement_str, test_filter, display_prefix in mutations:
+        fpath = mut_repo / rel_file
+        original_text = fpath.read_text(encoding="utf-8")
+        assert target_str in original_text, f"W1 mutation {mut_id} target string not found in {rel_file}"
+        fpath.write_text(original_text.replace(target_str, replacement_str, 1), encoding="utf-8")
+        try:
+            rc_m, out_m, err_m, dt_m = run_cmd(
+                ["swift", "test", "--no-parallel", "--filter", test_filter],
+                cwd=str(mut_repo),
+                env=mut_env,
+            )
+            combined = out_m + "\n" + err_m
+            assert rc_m != 0, f"W1 SURVIVED: {mut_id} exited 0 for --filter {test_filter}"
+            assert "Build complete!" in combined, (
+                f"W1 COMPILE FAILURE (invalid mutation kill): {mut_id} did not reach 'Build complete!':\n{combined}"
+            )
+            assert "Test run started" in combined, (
+                f"W1 NO TEST RUN: {mut_id} did not start test runner:\n{combined}"
+            )
+            expected_fail_marker = f'✘ Test "{display_prefix}'
+            assert expected_fail_marker in combined, (
+                f"W1 WRONG FAILURE: {mut_id} did not fail target test {expected_fail_marker!r}:\n{combined}"
+            )
+            print(f"[PASS] W1 {mut_id} -> compiled & killed by `{test_filter}` (rc={rc_m}, {dt_m/1000.0:.2f}s)")
+        finally:
+            fpath.write_text(original_text, encoding="utf-8")
+
+    # Verify restored isolated copy passes cleanly
+    rc_clean, out_clean, err_clean, _ = run_cmd(
+        ["swift", "test", "--no-parallel", "--filter", "DiagnoserTests/testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps"],
+        cwd=str(mut_repo),
+        env=mut_env,
+    )
+    assert rc_clean == 0, f"W1 restored temp repo failed clean check:\n{out_clean}\n{err_clean}"
+
+print(f"[PASS] W1: All {len(mutations)} scripted mutations compiled and were killed by named assertions in isolated temp workspace")
+print("\n=== ALL 6 M0 ACCEPTANCE ROWS + U9-U12 + W1 MUTATION CHECKS PASSED ===")
 PY

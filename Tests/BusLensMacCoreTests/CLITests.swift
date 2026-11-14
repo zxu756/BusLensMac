@@ -1,4 +1,5 @@
 import Foundation
+import MachO
 import Testing
 @testable import BusLensMacCore
 
@@ -16,13 +17,53 @@ struct CLITests {
         repoRootURL.appendingPathComponent("Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json")
     }
 
-    private static var debugBinaryURL: URL {
-        repoRootURL.appendingPathComponent(".build/debug/BusLensMac")
+    private static func resolveBuiltExecutableURL() throws -> URL {
+        let fm = FileManager.default
+        if let envBin = ProcessInfo.processInfo.environment["BUSLENS_BIN"],
+           !envBin.isEmpty,
+           fm.isExecutableFile(atPath: envBin) {
+            return URL(fileURLWithPath: envBin)
+        }
+
+        var candidateSeeds: [URL] = Bundle.allBundles.map(\.bundleURL)
+        for arg in CommandLine.arguments where arg.contains("/") {
+            candidateSeeds.append(URL(fileURLWithPath: arg))
+        }
+        let imageCount = _dyld_image_count()
+        for idx in 0..<imageCount {
+            if let cPath = _dyld_get_image_name(idx) {
+                let path = String(cString: cPath)
+                if path.contains("BusLensMac") {
+                    candidateSeeds.append(URL(fileURLWithPath: path))
+                }
+            }
+        }
+
+        for seed in candidateSeeds {
+            var dir = seed.standardizedFileURL
+            for _ in 0..<5 {
+                dir = dir.deletingLastPathComponent()
+                if dir.path == "/" || dir.path.isEmpty { break }
+                let sibling = dir.appendingPathComponent("BusLensMac")
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: sibling.path, isDirectory: &isDir),
+                   !isDir.boolValue,
+                   fm.isExecutableFile(atPath: sibling.path) {
+                    return sibling
+                }
+            }
+        }
+
+        throw NSError(
+            domain: "BusLensMac.CLITests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Could not locate built BusLensMac binary in active SwiftPM products directory"]
+        )
     }
 
     private static func runBinary(_ args: [String]) throws -> (code: Int32, stdout: String, stderr: String) {
         let proc = Process()
-        proc.executableURL = debugBinaryURL
+        proc.executableURL = try resolveBuiltExecutableURL()
         proc.arguments = args
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -105,7 +146,11 @@ struct CLITests {
         #expect(wootingEn.portCeilingGbps == nil)
         #expect(wootingEn.portCeilingLabel == "Unknown")
         #expect(wootingEn.behindExternalHub == false)
-        #expect(wootingEn.verdictLabel == "HID / low-latency peripheral")
+        #expect(wootingEn.verdict == "indeterminate")
+        #expect(wootingEn.verdictLabel == "Indeterminate")
+        let ajazzEn = try #require(payloadEn.devices.first { $0.name == "AJAZZ AJ159 APEX" })
+        #expect(ajazzEn.verdict == "low_speed_peripheral")
+        #expect(ajazzEn.verdictLabel == "Low-speed peripheral")
 
         let jsonZh = try Self.runBinary([
             "--cli", "topology",
@@ -118,7 +163,9 @@ struct CLITests {
         #expect(payloadZh.language == "zh-Hans")
         let wootingZh = try #require(payloadZh.devices.first { $0.name == "Wooting 60HE v2" })
         #expect(wootingZh.portCeilingLabel == "未知")
-        #expect(wootingZh.verdictLabel == "低速外设（正常）")
+        #expect(wootingZh.verdictLabel == "无法判断是否被限速")
+        let ajazzZh = try #require(payloadZh.devices.first { $0.name == "AJAZZ AJ159 APEX" })
+        #expect(ajazzZh.verdictLabel == "低速外设（USB 1.x）")
 
         let textEn = try Self.runBinary([
             "--cli", "topology",
@@ -126,8 +173,8 @@ struct CLITests {
             "--lang", "en"
         ])
         #expect(textEn.code == 0)
-        #expect(textEn.stdout.contains("[HID / low-latency peripheral]"))
-        #expect(!textEn.stdout.contains("HID / low-latenc]"))
+        #expect(textEn.stdout.contains("[Low-speed peripheral]"))
+        #expect(!textEn.stdout.contains("[Low-speed periph]"))
         #expect(textEn.stdout.contains("ceiling: Unknown"))
 
         let textZh = try Self.runBinary([
@@ -136,7 +183,7 @@ struct CLITests {
             "--lang", "zh"
         ])
         #expect(textZh.code == 0)
-        #expect(textZh.stdout.contains("低速外设（正常）"))
+        #expect(textZh.stdout.contains("低速外设（USB 1.x）"))
         #expect(textZh.stdout.contains("上限：未知"))
     }
 

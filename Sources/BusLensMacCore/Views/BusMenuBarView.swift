@@ -65,7 +65,7 @@ public struct BusMenuBarView: View {
                          ? localizer.L("Ports idle", "端口空闲")
                          : (indetCount > 0
                             ? localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
-                            : localizer.L("Full / HID normal", "满速 / 低速外设正常")))
+                            : localizer.L("Full / USB 1.x rate", "满速 / USB 1.x 低速外设")))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(BenchTheme.ink)
                         .padding(.horizontal, 8)

@@ -68,7 +68,7 @@ public enum BusProfilerCollector {
             capturedAt: capturedAt,
             controllers: [],
             devices: [],
-            power: PowerDeliverySummary(powerSource: "Unknown")
+            power: PowerDeliverySummary()
         )
     }
 
@@ -92,15 +92,6 @@ public enum BusProfilerCollector {
                 String(describing: a["_name"] ?? "") < String(describing: b["_name"] ?? "")
             }
 
-            var hostExplicitCeilings: [String: Double] = [:]
-            for busDict in sortedTB {
-                if let key = hostHardwareIdentityKey(for: busDict),
-                   let rec = findFirstReceptacle(in: busDict),
-                   let explicit = explicitReceptacleCeilingGbps(in: rec) {
-                    hostExplicitCeilings[key] = max(hostExplicitCeilings[key] ?? 0, explicit)
-                }
-            }
-
             for busDict in sortedTB {
                 let rawName = (busDict["_name"] as? String) ?? "Thunderbolt Bus"
                 let displayTitle = prettifyBusName(rawName)
@@ -113,17 +104,7 @@ public enum BusProfilerCollector {
                     ? BottleneckDiagnoser.parseSpeedGbps(speedStr!)
                     : 0.0
 
-                let ceilingGbps: Double? = {
-                    if let explicit = explicitReceptacleCeilingGbps(in: rec) {
-                        return explicit
-                    }
-                    if let hostKey = hostHardwareIdentityKey(for: busDict),
-                       let siblingCeiling = hostExplicitCeilings[hostKey],
-                       siblingCeiling >= negotiatedGbps {
-                        return siblingCeiling
-                    }
-                    return nil
-                }()
+                let ceilingGbps = explicitReceptacleCeilingGbps(in: rec)
 
                 var busDevices: [AttachedBusDevice] = []
                 if let children = busDict["_items"] as? [[String: Any]] {
@@ -227,7 +208,7 @@ public enum BusProfilerCollector {
             capturedAt: Date(),
             controllers: [],
             devices: [],
-            power: PowerDeliverySummary(powerSource: "Unknown")
+            power: PowerDeliverySummary()
         )
     }
 
@@ -238,15 +219,6 @@ public enum BusProfilerCollector {
     }
 
     // MARK: - Helpers
-
-    private static func hostHardwareIdentityKey(for busDict: [String: Any]) -> String? {
-        guard let vendor = (busDict["vendor_name_key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              let model = (busDict["device_name_key"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !vendor.isEmpty, !model.isEmpty else {
-            return nil
-        }
-        return "\(vendor)|\(model)"
-    }
 
     private static func explicitReceptacleCeilingGbps(in rec: [String: Any]?) -> Double? {
         guard let rec else { return nil }
@@ -362,18 +334,28 @@ public enum BusProfilerCollector {
         }
     }
 
-    private static func isBuiltInUSBNode(_ item: [String: Any], name: String) -> Bool {
+    private static func isBuiltInUSBNode(_ item: [String: Any]) -> Bool {
         if let hwType = item["USBKeyHardwareType"] as? String,
            hwType.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("Built-in") == .orderedSame {
             return true
         }
-        if let builtIn = (item["Built-in_Device"] as? String) ?? (item["built_in"] as? String),
-           builtIn.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("yes") == .orderedSame {
+        if parseBoolFlag(item["Built-in_Device"]) == true || parseBoolFlag(item["built_in"]) == true {
             return true
         }
-        let lowerName = name.lowercased()
-        if lowerName.contains("root hub") || lowerName.contains("internal hub") {
-            return true
+        return false
+    }
+
+    private static func isExplicitUSBHubClass(_ item: [String: Any]) -> Bool {
+        for key in ["bDeviceClass", "USBDeviceKeyDeviceClass", "device_class"] {
+            if let clsInt = item[key] as? Int, clsInt == 9 {
+                return true
+            }
+            if let clsStr = item[key] as? String {
+                let normalized = clsStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if normalized == "9" || normalized == "0x09" || normalized == "0x9" || normalized == "hub" {
+                    return true
+                }
+            }
         }
         return false
     }
@@ -405,10 +387,11 @@ public enum BusProfilerCollector {
                 ?? (item["speed"] as? String)
                 ?? ""
             let gbps = BottleneckDiagnoser.parseSpeedGbps(rawSpeed)
-            let isHub = name.lowercased().contains("hub")
-            let isBuiltIn = isBuiltInUSBNode(item, name: name)
+            let children = (item["_items"] as? [[String: Any]]) ?? []
+            let isBuiltIn = isBuiltInUSBNode(item)
+            let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty
 
-            if !isHub {
+            if !isHubContainer {
                 let eval = BottleneckDiagnoser.evaluateDevice(
                     name: name,
                     vendor: vendor,
@@ -436,9 +419,9 @@ public enum BusProfilerCollector {
                 )
             }
 
-            if let children = item["_items"] as? [[String: Any]] {
-                let childBehindExternalHub = behindExternalHub || (isHub && !isBuiltIn)
-                let childDepth = (isHub && isBuiltIn) ? depth : (depth + 1)
+            if !children.isEmpty {
+                let childBehindExternalHub = behindExternalHub || !isBuiltIn
+                let childDepth = isBuiltIn ? depth : (depth + 1)
                 walkUSBDevices(
                     items: children,
                     busTitle: busTitle,
@@ -452,7 +435,7 @@ public enum BusProfilerCollector {
     }
 
     public static func parsePower(_ powerItems: [[String: Any]], pmsetOutput: String? = nil) -> PowerDeliverySummary {
-        var source = "AC Power"
+        var source: String?
         var watts: Int?
         var explicitLowPower: Bool?
 
@@ -494,14 +477,14 @@ public enum BusProfilerCollector {
             }
         }
 
-        let lowPower: Bool = {
+        let lowPower: Bool? = {
             if let explicitLowPower {
                 return explicitLowPower
             }
             if let pmsetOutput, let pmsetVal = parsePmsetLowPowerMode(pmsetOutput) {
                 return pmsetVal
             }
-            return false
+            return nil
         }()
 
         return PowerDeliverySummary(powerSource: source, negotiatedWatts: watts, lowPowerMode: lowPower)

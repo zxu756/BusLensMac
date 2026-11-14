@@ -23,8 +23,8 @@ public enum BusProtocolKind: String, Codable, Equatable, Sendable {
 
 public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
     case fullRate = "Full bus rate"
-    case lowSpeedPeripheral = "HID / low-latency peripheral"
-    case indeterminate = "Cannot determine if throttled"
+    case lowSpeedPeripheral = "Low-speed peripheral"
+    case indeterminate = "Indeterminate"
 
     public var jsonCode: String {
         switch self {
@@ -50,8 +50,8 @@ public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
     public func localizedLabel(_ localizer: AppLocalizer) -> String {
         switch self {
         case .fullRate: return localizer.L("Full bus rate", "满速")
-        case .lowSpeedPeripheral: return localizer.L("HID / low-latency peripheral", "低速外设（正常）")
-        case .indeterminate: return localizer.L("Cannot determine if throttled", "无法判断是否被限速")
+        case .lowSpeedPeripheral: return localizer.L("Low-speed peripheral", "低速外设（USB 1.x）")
+        case .indeterminate: return localizer.L("Indeterminate", "无法判断是否被限速")
         }
     }
 }
@@ -213,11 +213,16 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
 }
 
 public struct PowerDeliverySummary: Codable, Equatable, Sendable {
-    public var powerSource: String
+    public var powerSource: String?
     public var negotiatedWatts: Int?
-    public var lowPowerMode: Bool
+    public var lowPowerMode: Bool?
 
-    public init(powerSource: String, negotiatedWatts: Int? = nil, lowPowerMode: Bool = false) {
+    public var lowPowerModeEnabled: Bool? {
+        get { lowPowerMode }
+        set { lowPowerMode = newValue }
+    }
+
+    public init(powerSource: String? = nil, negotiatedWatts: Int? = nil, lowPowerMode: Bool? = nil) {
         self.powerSource = powerSource
         self.negotiatedWatts = negotiatedWatts
         self.lowPowerMode = lowPowerMode
@@ -227,7 +232,10 @@ public struct PowerDeliverySummary: Codable, Equatable, Sendable {
         if let w = negotiatedWatts, w > 0 {
             return "\(w)W USB-C PD"
         }
-        return powerSource
+        if let powerSource, !powerSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return powerSource
+        }
+        return "Unknown"
     }
 
     @MainActor
@@ -235,12 +243,30 @@ public struct PowerDeliverySummary: Codable, Equatable, Sendable {
         if let w = negotiatedWatts, w > 0 {
             return "\(w)W USB-C PD"
         }
-        guard localizer.isChinese else { return powerSource }
+        guard let powerSource, !powerSource.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return localizer.L("Unknown", "未知")
+        }
         let lower = powerSource.lowercased()
+        if lower == "unknown" {
+            return localizer.L("Unknown", "未知")
+        }
+        guard localizer.isChinese else { return powerSource }
         if lower.contains("ac") { return "交流电源" }
         if lower.contains("battery") { return "内置电池" }
-        if lower.contains("unknown") { return "未知电源" }
+        if lower.contains("unknown") { return "未知" }
         return powerSource
+    }
+
+    @MainActor
+    public func localizedLowPowerModeLabel(_ localizer: AppLocalizer) -> String {
+        switch lowPowerMode {
+        case .some(true):
+            return localizer.L("Yes", "是")
+        case .some(false):
+            return localizer.L("No", "否")
+        case .none:
+            return localizer.L("Unknown", "未知")
+        }
     }
 }
 

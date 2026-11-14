@@ -141,8 +141,8 @@ public struct BusDashboardView: View {
             verticalSeam
             readoutCell(
                 value: "\(monitor.snapshot.activeTunnelCount)",
-                label: localizer.L("Active 40G PCIe tunnels", "活跃 40G PCIe 隧道"),
-                detail: localizer.L("Full USB4 / TB3 / TB4 lanes", "满速 USB4 / 雷雳 3 / 雷雳 4 通道"),
+                label: localizer.L("40 Gb/s+ active links", "40 Gb/s 及以上链路"),
+                detail: localizer.L("Negotiated >= 40 Gb/s", "当前协商 >= 40 Gb/s"),
                 color: BenchTheme.ink
             )
             verticalSeam
@@ -159,9 +159,10 @@ public struct BusDashboardView: View {
             readoutCell(
                 value: pdBadge,
                 label: localizer.L("Host power delivery", "主机供电功率 (PD)"),
-                detail: monitor.snapshot.power.lowPowerMode
-                    ? localizer.L("Low Power Mode active", "已开启低电量模式")
-                    : localizer.L("Full bus power budget", "总线供电功率充足"),
+                detail: localizer.L(
+                    "Low Power Mode: \(monitor.snapshot.power.localizedLowPowerModeLabel(localizer))",
+                    "低电量模式：\(monitor.snapshot.power.localizedLowPowerModeLabel(localizer))"
+                ),
                 color: BenchTheme.ink,
                 valueHasCJK: pdHasCJK
             )

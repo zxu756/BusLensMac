@@ -172,6 +172,45 @@ struct CollectorTests {
         #expect(usbDev.localizedPortCeilingLabel(zh) == "未知")
     }
 
+    @Test("U11: Sibling Thunderbolt bus omitting speed reports nil / Unknown / 未知 instead of copying 'Up to 40 Gb/s' from another bus on the same host")
+    @MainActor
+    func testSiblingThunderboltBusDoesNotCopyCeiling() throws {
+        let siblingJSON = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "vendor_name_key": "Apple Inc.",
+              "device_name_key": "Mac mini",
+              "receptacle_1_tag": {
+                "current_speed_key": "Up to 40 Gb/s",
+                "receptacle_status_key": "receptacle_no_devices_connected"
+              }
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "vendor_name_key": "Apple Inc.",
+              "device_name_key": "Mac mini",
+              "receptacle_1_tag": {
+                "receptacle_status_key": "receptacle_no_devices_connected"
+              }
+            }
+          ]
+        }
+        """
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(siblingJSON.utf8))
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        let bus0 = try #require(snap.controllers.first { $0.id == "tb::thunderboltusb4_bus_0" })
+        let bus1 = try #require(snap.controllers.first { $0.id == "tb::thunderboltusb4_bus_1" })
+        #expect(bus0.maxGbps == 40.0)
+        #expect(bus0.localizedMaxRateLabel(en) == "40 Gb/s")
+        #expect(bus1.maxGbps == nil)
+        #expect(bus1.localizedMaxRateLabel(en) == "Unknown")
+        #expect(bus1.localizedMaxRateLabel(zh) == "未知")
+    }
+
     @Test("U5 & Row 5: Scrubbed Mac mini host fixture parses 3 real devices, preserves speeds, and does NOT flag Apple Built-in hubs as external hubs")
     @MainActor
     func testRealHostMacMiniScrubbedFixtureAndInternalHubHandling() throws {
@@ -186,12 +225,12 @@ struct CollectorTests {
 
         #expect(tbDev.negotiatedSpeedLabel == "40 Gb/s")
         #expect(tbDev.negotiatedGbps == 40.0)
-        #expect(tbDev.portCeilingGbps == 40.0)
+        #expect(tbDev.portCeilingGbps == nil)
         #expect(tbDev.verdict == .fullRate)
 
         #expect(wooting.negotiatedSpeedLabel == "480 Mb/s")
         #expect(wooting.negotiatedGbps == 0.48)
-        #expect(wooting.verdict == .lowSpeedPeripheral)
+        #expect(wooting.verdict == .indeterminate)
         #expect(wooting.depth == 0)
         #expect(wooting.behindExternalHub == false)
         #expect(!wooting.modeDescription.lowercased().contains("hub"))
@@ -283,6 +322,64 @@ struct CollectorTests {
         #expect(externalHubKB.verdict == .lowSpeedPeripheral)
     }
 
+    @Test("U10: Leaf USB devices containing 'hub' in name ('Hubble Backup Drive', empty 'Generic 4-Port Hub') are never hidden by product-name substring matching")
+    @MainActor
+    func testHubbleBackupDriveNotHiddenByHubSubstring() throws {
+        let json = """
+        {
+          "SPUSBDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "host_controller_speed": "Up to 10 Gb/s",
+              "_items": [
+                {
+                  "_name": "Hubble Backup Drive",
+                  "manufacturer": "Acme Storage",
+                  "speed": "Up to 480 Mb/s"
+                },
+                {
+                  "_name": "Generic 4-Port Hub",
+                  "manufacturer": "Generic",
+                  "speed": "Up to 5 Gb/s"
+                },
+                {
+                  "_name": "Anker USB-C Adapter",
+                  "manufacturer": "Anker",
+                  "speed": "Up to 5 Gb/s",
+                  "_items": [
+                    {
+                      "_name": "Downstream Flash Drive",
+                      "manufacturer": "Acme",
+                      "speed": "Up to 480 Mb/s"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8))
+        let hubble = try #require(snap.devices.first { $0.name == "Hubble Backup Drive" })
+        #expect(hubble.negotiatedSpeedLabel == "480 Mb/s")
+        #expect(hubble.verdict == .indeterminate)
+        #expect(hubble.behindExternalHub == false)
+        #expect(hubble.depth == 0)
+
+        let emptyHub = try #require(snap.devices.first { $0.name == "Generic 4-Port Hub" })
+        #expect(emptyHub.negotiatedSpeedLabel == "5 Gb/s")
+        #expect(emptyHub.verdict == .indeterminate)
+
+        let downstream = try #require(snap.devices.first { $0.name == "Downstream Flash Drive" })
+        #expect(downstream.behindExternalHub == true)
+        #expect(downstream.depth == 1)
+
+        let enText = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: AppLocalizer(fixedLanguage: .en), isDemo: false)
+        let zhText = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: AppLocalizer(fixedLanguage: .zhHans), isDemo: false)
+        #expect(enText.contains("Hubble Backup Drive"))
+        #expect(zhText.contains("Hubble Backup Drive"))
+    }
+
     @Test("U8: Low Power Mode accepts string ('Yes', '1', 'true', 'sppower_low_power_mode_enabled'), integer 1, and pmset fallback")
     func testLowPowerModeStringIntegerAndPmsetParsing() {
         let samples: [(String, Bool)] = [
@@ -319,5 +416,39 @@ struct CollectorTests {
             pmsetOutput: pmsetOn
         )
         #expect(fallbackSnap.power.lowPowerMode == true)
+    }
+
+    @Test("U12: Missing SPPowerDataType and empty pmset render Unknown / 未知 instead of defaulting to AC Power and Low Power Mode Off")
+    @MainActor
+    func testMissingPowerTelemetryReportsUnknownNotACPowerOrFalse() throws {
+        let emptySnap = try BusProfilerCollector.parseSystemProfilerJSONValidated(
+            Data(#"{"SPPowerDataType":[]}"#.utf8),
+            pmsetOutput: nil
+        )
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        #expect(emptySnap.power.powerSource == nil)
+        #expect(emptySnap.power.lowPowerMode == nil)
+        #expect(emptySnap.power.lowPowerModeEnabled == nil)
+        #expect(emptySnap.power.localizedBadge(en) == "Unknown")
+        #expect(emptySnap.power.localizedBadge(zh) == "未知")
+        #expect(emptySnap.power.localizedLowPowerModeLabel(en) == "Unknown")
+        #expect(emptySnap.power.localizedLowPowerModeLabel(zh) == "未知")
+
+        let enText = BusCLIRunner.renderTopologyText(snapshot: emptySnap, localizer: en, isDemo: false)
+        let zhText = BusCLIRunner.renderTopologyText(snapshot: emptySnap, localizer: zh, isDemo: false)
+        #expect(enText.contains("Power: Unknown (Low Power Mode: Unknown)"))
+        #expect(!enText.contains("AC Power"))
+        #expect(zhText.contains("供电状态：未知（低电量模式：未知）"))
+        #expect(!zhText.contains("交流电源"))
+
+        let enJSON = try BusCLIRunner.renderTopologyJSON(snapshot: emptySnap, localizer: en, isDemo: false)
+        #expect(enJSON.contains(#""powerSource" : null"#))
+        #expect(enJSON.contains(#""lowPowerMode" : null"#))
+        #expect(enJSON.contains(#""localizedBadge" : "Unknown""#))
+
+        let zhJSON = try BusCLIRunner.renderTopologyJSON(snapshot: emptySnap, localizer: zh, isDemo: false)
+        #expect(zhJSON.contains(#""localizedBadge" : "未知""#))
     }
 }

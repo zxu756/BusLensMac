@@ -48,7 +48,7 @@ struct BusLensMacCoreTests {
         )
         #expect(fullTB.verdict == .fullRate)
 
-        let hidKB = BottleneckDiagnoser.evaluateDevice(
+        let usb2KB = BottleneckDiagnoser.evaluateDevice(
             name: "60HE Analog Keyboard",
             vendor: "Wooting",
             protocolKind: .usbHost,
@@ -56,7 +56,17 @@ struct BusLensMacCoreTests {
             portCeilingGbps: nil,
             behindHub: true
         )
-        #expect(hidKB.verdict == .lowSpeedPeripheral)
+        #expect(usb2KB.verdict == .indeterminate)
+
+        let usb1Receiver = BottleneckDiagnoser.evaluateDevice(
+            name: "Full-Speed Receiver",
+            vendor: "Generic",
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.012,
+            portCeilingGbps: nil,
+            behindHub: false
+        )
+        #expect(usb1Receiver.verdict == .lowSpeedPeripheral)
     }
 
     @Test("Parses SPThunderboltDataType & SPUSBHostDataType JSON and scrubs serials/UUIDs")
@@ -149,14 +159,14 @@ struct BusLensMacCoreTests {
             preferredLanguages: ["en-US"]
         )
         #expect(localizer.language == .en)
-        #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "Cannot determine if throttled")
+        #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "Indeterminate")
 
         localizer.toggle()
         #expect(localizer.language == .zhHans)
         #expect(store.string(forKey: AppLocalizer.defaultPreferenceKey) == "zh-Hans")
         #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "无法判断是否被限速")
         #expect(LinkHealthVerdict.fullRate.localizedLabel(localizer) == "满速")
-        #expect(LinkHealthVerdict.lowSpeedPeripheral.localizedLabel(localizer) == "低速外设（正常）")
+        #expect(LinkHealthVerdict.lowSpeedPeripheral.localizedLabel(localizer) == "低速外设（USB 1.x）")
 
         let preview = BusLensMonitor.preview()
         let usb480 = preview.snapshot.indeterminateDevices.first { $0.negotiatedGbps <= 0.5 }!

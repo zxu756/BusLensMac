@@ -14,25 +14,35 @@ public struct BusCLIExecutionResult: Equatable, Sendable {
 
 public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
     public struct PowerPayload: Codable, Equatable, Sendable {
-        public let powerSource: String
+        public let powerSource: String?
         public let localizedBadge: String
         public let negotiatedWatts: Int?
-        public let lowPowerMode: Bool
+        public let lowPowerMode: Bool?
+        public let lowPowerModeLabel: String
 
         enum CodingKeys: String, CodingKey {
-            case powerSource, localizedBadge, negotiatedWatts, lowPowerMode
+            case powerSource, localizedBadge, negotiatedWatts, lowPowerMode, lowPowerModeLabel
         }
 
         public func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
-            try c.encode(powerSource, forKey: .powerSource)
+            if let powerSource {
+                try c.encode(powerSource, forKey: .powerSource)
+            } else {
+                try c.encodeNil(forKey: .powerSource)
+            }
             try c.encode(localizedBadge, forKey: .localizedBadge)
             if let negotiatedWatts {
                 try c.encode(negotiatedWatts, forKey: .negotiatedWatts)
             } else {
                 try c.encodeNil(forKey: .negotiatedWatts)
             }
-            try c.encode(lowPowerMode, forKey: .lowPowerMode)
+            if let lowPowerMode {
+                try c.encode(lowPowerMode, forKey: .lowPowerMode)
+            } else {
+                try c.encodeNil(forKey: .lowPowerMode)
+            }
+            try c.encode(lowPowerModeLabel, forKey: .lowPowerModeLabel)
         }
     }
 
@@ -242,14 +252,15 @@ public enum BusCLIRunner {
                     )
                 )
             }
-            let outURL = URL(fileURLWithPath: tail[exportIdx + 1])
+            let rawOutPath = tail[exportIdx + 1]
+            let outURL = URL(fileURLWithPath: rawOutPath)
             do {
                 try BusScreenshotExporter.exportMarketingScreenshots(to: outURL, language: resolvedLang)
                 return BusCLIExecutionResult(
                     exitCode: 0,
                     stdout: localizer.L(
-                        "Exported 2x Retina [DEMO] screenshots (\(resolvedLang.rawValue)) to \(outURL.path)\n",
-                        "已导出 2x Retina [演示数据] 截图（\(resolvedLang.rawValue)）至 \(outURL.path)\n"
+                        "Exported 2x Retina [DEMO] screenshots (\(resolvedLang.rawValue)) to \(rawOutPath)\n",
+                        "已导出 2x Retina [演示数据] 截图（\(resolvedLang.rawValue)）至 \(rawOutPath)\n"
                     )
                 )
             } catch {
@@ -441,7 +452,8 @@ public enum BusCLIRunner {
                 powerSource: snapshot.power.powerSource,
                 localizedBadge: snapshot.power.localizedBadge(localizer),
                 negotiatedWatts: snapshot.power.negotiatedWatts,
-                lowPowerMode: snapshot.power.lowPowerMode
+                lowPowerMode: snapshot.power.lowPowerMode,
+                lowPowerModeLabel: snapshot.power.localizedLowPowerModeLabel(localizer)
             ),
             controllers: snapshot.controllers.map { ctrl in
                 .init(
@@ -497,9 +509,11 @@ public enum BusCLIRunner {
             ))
         }
         let peakStr = BottleneckDiagnoser.formatSpeedGbps(snapshot.peakNegotiatedGbps, localizer: localizer)
-        let lpmNote = snapshot.power.lowPowerMode
-            ? localizer.L(" (Low Power Mode: ON)", "（低电量模式：开启）")
-            : ""
+        let lpmLabel = snapshot.power.localizedLowPowerModeLabel(localizer)
+        let lpmNote = localizer.L(
+            " (Low Power Mode: \(lpmLabel))",
+            "（低电量模式：\(lpmLabel)）"
+        )
         lines.append(localizer.L(
             "Power: \(snapshot.power.localizedBadge(localizer))\(lpmNote) | Peak Negotiated Link: \(peakStr)",
             "供电状态：\(snapshot.power.localizedBadge(localizer))\(lpmNote) | 最高协商链路：\(peakStr)"

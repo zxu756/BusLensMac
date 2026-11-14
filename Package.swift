@@ -26,7 +26,7 @@ let package = Package(
         ),
         .testTarget(
             name: "BusLensMacCoreTests",
-            dependencies: ["BusLensMacCore"],
+            dependencies: ["BusLensMacCore", "BusLensMac"],
             swiftSettings: testSwiftSettings
         )
     ],
