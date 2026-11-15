@@ -25,6 +25,7 @@ public enum BottleneckSegment: String, Codable, Equatable, Sendable {
     case cable = "cable"
     case hub = "hub"
     case port = "port"
+    case cableOrPortIndeterminate = "cable_or_port_indeterminate"
 
     @MainActor
     public func localizedLabel(_ localizer: AppLocalizer) -> String {
@@ -32,6 +33,7 @@ public enum BottleneckSegment: String, Codable, Equatable, Sendable {
         case .cable: return localizer.L("Cable-limited", "线缆限速")
         case .hub: return localizer.L("Hub-limited", "集线器限速")
         case .port: return localizer.L("Port-limited", "端口限速")
+        case .cableOrPortIndeterminate: return localizer.L("Cannot determine if cable or port", "无法判断是线还是口")
         }
     }
 }

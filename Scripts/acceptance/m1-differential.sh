@@ -631,14 +631,14 @@ with tempfile.TemporaryDirectory(prefix="buslens-m1-syn-") as tmpdir:
     syn_ioreg_path.write_text(raw_plist, encoding="utf-8")
 
     expected_16 = {
-        "ASM2464PD 480M": ("throttled", "cable"),
+        "ASM2464PD 480M": ("throttled", "cable_or_port_indeterminate"),
         "ASM2464PD 10G": ("indeterminate", None),
         "Wooting 60HE": ("normal", None),
         "USB Optical Mouse": ("low_speed_peripheral", None),
         "2.4G Wireless Receiver": ("low_speed_peripheral", None),
         "Logitech Unifying Receiver": ("low_speed_peripheral", None),
         "USB DISK 2.0": ("normal", None),
-        "My Passport 25E2": ("throttled", "cable"),
+        "My Passport 25E2": ("throttled", "cable_or_port_indeterminate"),
         "SanDisk Extreme PRO USB2 Drive": ("normal", None),
         "Portable SSD T7 Behind USB2 Hub": ("throttled", "hub"),
         "Portable SSD T7 Native 10G": ("normal", None),

@@ -152,12 +152,35 @@ struct CLITests {
 
         let syntheticSP = """
         {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "CableLimitedTBSSD",
+                  "device_name_key": "CableLimitedTBSSD",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
           "SPUSBHostDataType": [
             {
               "_name": "USB 3.1 Bus",
               "USBKeyLocationID": "0x01000000",
               "_items": [
-                { "_name": "CableLimitedSSD", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "UnknownCeilingSSD", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
                 {
                   "_name": "USB2 Hub",
                   "USBKeyLocationID": "0x01120000",
@@ -206,6 +229,39 @@ struct CLITests {
                         ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02100000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
                     ]
                 ]
+            ],
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType3",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "CableLimitedTBSSD"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
             ]
         ]
         let ioregData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
@@ -219,9 +275,10 @@ struct CLITests {
         ])
         #expect(throttledJSON.exitCode == 0)
         let throttledPayload = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(throttledJSON.stdout.utf8))
-        #expect(throttledPayload.devices.count == 3)
+        #expect(throttledPayload.devices.count == 4)
         let byName = Dictionary(uniqueKeysWithValues: throttledPayload.devices.map { ($0.name, $0) })
-        #expect(byName["CableLimitedSSD"]?.bottleneckSegment == "cable")
+        #expect(byName["CableLimitedTBSSD"]?.bottleneckSegment == "cable")
+        #expect(byName["UnknownCeilingSSD"]?.bottleneckSegment == "cable_or_port_indeterminate")
         #expect(byName["HubLimitedSSD"]?.bottleneckSegment == "hub")
         #expect(byName["PortLimitedSSD"]?.bottleneckSegment == "port")
 
@@ -233,6 +290,7 @@ struct CLITests {
         ])
         #expect(throttledZh.exitCode == 0)
         #expect(throttledZh.stdout.contains("线缆限速"))
+        #expect(throttledZh.stdout.contains("无法判断是线还是口"))
         #expect(throttledZh.stdout.contains("集线器限速"))
         #expect(throttledZh.stdout.contains("端口限速"))
 

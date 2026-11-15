@@ -368,16 +368,16 @@ public enum BottleneckDiagnoser {
         behindExternalHub: Bool,
         upstreamHubGbps: Double?
     ) -> BottleneckSegment {
-        // 1. Host physical port max speed is lower than device capability (and any external hub isn't slower than the port)
+        // 1. Host physical port max speed is explicitly known, lower than device capability, and caps negotiated speed
         if let portCeiling = portCeilingGbps,
            portCeiling > 0,
            portCeiling + 0.01 < requiredSpeedGbps,
            negotiatedGbps + 0.01 >= portCeiling,
-           (!behindExternalHub || (upstreamHubGbps ?? Double.greatestFiniteMagnitude) + 0.01 >= portCeiling) {
+           (!behindExternalHub || ((upstreamHubGbps ?? 0) + 0.01 >= portCeiling)) {
             return .port
         }
 
-        // 2. External USB hub speed is lower than device capability and caps negotiated speed
+        // 2. External USB hub speed is explicitly known, lower than device capability, and caps negotiated speed
         if behindExternalHub,
            let hubSpeed = upstreamHubGbps,
            hubSpeed > 0,
@@ -386,8 +386,15 @@ public enum BottleneckDiagnoser {
             return .hub
         }
 
-        // 3. Otherwise host port and any upstream hub support faster links -> cable / physical link bottleneck
-        return .cable
+        // 3. Blame cable only when host port ceiling (and any upstream hub speed) is explicitly known to exceed negotiated speed
+        if let portCeiling = portCeilingGbps,
+           portCeiling > negotiatedGbps + 0.01,
+           (!behindExternalHub || ((upstreamHubGbps ?? 0) > negotiatedGbps + 0.01)) {
+            return .cable
+        }
+
+        // 4. Otherwise host port (or upstream hub) ceiling is missing -> cannot determine whether cable or port
+        return .cableOrPortIndeterminate
     }
 
     private static func throttledEnglishDetail(
@@ -409,6 +416,8 @@ public enum BottleneckDiagnoser {
             return "Throttled (hub-limited): device supports \(capStr), negotiated at \(rateLabel) behind \(hubStr) external USB hub."
         case .cable:
             return "Throttled (cable-limited): device supports \(capStr), negotiated at \(rateLabel); host port supports higher speed."
+        case .cableOrPortIndeterminate:
+            return "Throttled (cannot determine if cable or port): device supports \(capStr), negotiated at \(rateLabel); host port ceiling is unknown."
         }
     }
 
@@ -455,7 +464,7 @@ public enum BottleneckDiagnoser {
                 }
                 return "更高速率"
             }()
-            switch device.bottleneckSegment ?? .cable {
+            switch device.bottleneckSegment ?? .cableOrPortIndeterminate {
             case .port:
                 let portStr = device.portCeilingGbps.map(formatSpeedGbps) ?? rate
                 return "被限速（端口限速）：设备支持 \(capStr)，当前仅 \(rate)（受限于主机端口上限 \(portStr)）。"
@@ -464,6 +473,8 @@ public enum BottleneckDiagnoser {
                 return "被限速（集线器限速）：设备支持 \(capStr)，当前经由 \(hubStr) 外接 USB 集线器协商为 \(rate)。"
             case .cable:
                 return "被限速（线缆限速）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口支持更高速率，限速在连接线缆）。"
+            case .cableOrPortIndeterminate:
+                return "被限速（无法判断是线还是口）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口上限未知，无法判断是线还是口）。"
             }
         case .indeterminate:
             return "实际速率 \(rate)，无法判断是否被限速。"

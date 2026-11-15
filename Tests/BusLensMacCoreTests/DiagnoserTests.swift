@@ -266,7 +266,7 @@ struct DiagnoserTests {
         let diskUSB3 = try #require(snap.devices.first { $0.name == "ThumbDrive USB3At12M" })
         #expect(diskUSB3.negotiatedSpeedLabel == "12 Mb/s")
         #expect(diskUSB3.verdict == .throttled)
-        #expect(diskUSB3.bottleneckSegment == .cable)
+        #expect(diskUSB3.bottleneckSegment == .cableOrPortIndeterminate)
 
         let mouse = try #require(snap.devices.first { $0.name == "Optical Mouse" })
         #expect(mouse.negotiatedSpeedLabel == "12 Mb/s")
@@ -586,9 +586,9 @@ struct DiagnoserTests {
         #expect(byName["External USB2 Hub"] == nil)
         #expect(byName["External USB3 Gen2 Hub"] == nil)
 
-        // 1. ASM2464PD 480M (bcdUSB 0x0210 on 10G port) -> Throttled (cable)
+        // 1. ASM2464PD 480M (bcdUSB 0x0210 on USB-C port with unknown ceiling) -> Throttled (cannot determine if cable or port)
         #expect(byName["ASM2464PD 480M"]?.verdict == .throttled)
-        #expect(byName["ASM2464PD 480M"]?.bottleneckSegment == .cable)
+        #expect(byName["ASM2464PD 480M"]?.bottleneckSegment == .cableOrPortIndeterminate)
         // 2. ASM2464PD 10G (bcdUSB 0x0320 without SSP sublink attribute) -> Indeterminate
         #expect(byName["ASM2464PD 10G"]?.verdict == .indeterminate)
         // 3. Wooting 60HE (bcdUSB 0x0200 at 480M) -> Normal
@@ -599,9 +599,9 @@ struct DiagnoserTests {
         #expect(byName["Logitech Unifying Receiver"]?.verdict == .lowSpeedPeripheral)
         // 7. USB DISK 2.0 (bcdUSB 0x0200 at 480M) -> Normal
         #expect(byName["USB DISK 2.0"]?.verdict == .normal)
-        // 8. My Passport 25E2 (bcdUSB 0x0210 at 480M) -> Throttled (cable)
+        // 8. My Passport 25E2 (bcdUSB 0x0210 at 480M on USB-C port with unknown ceiling) -> Throttled (cannot determine if cable or port)
         #expect(byName["My Passport 25E2"]?.verdict == .throttled)
-        #expect(byName["My Passport 25E2"]?.bottleneckSegment == .cable)
+        #expect(byName["My Passport 25E2"]?.bottleneckSegment == .cableOrPortIndeterminate)
         // 9. SanDisk Extreme PRO USB2 Drive (bcdUSB 0x0200 at 480M) -> Normal (never keyword-guessed!)
         #expect(byName["SanDisk Extreme PRO USB2 Drive"]?.verdict == .normal)
         // 10. Portable SSD T7 Behind USB2 Hub -> Throttled (hub)
@@ -631,7 +631,8 @@ struct DiagnoserTests {
         #expect(byName["TB5 Dock"]?.verdict == .fullRate)
 
         let zh = AppLocalizer(fixedLanguage: .zhHans)
-        #expect(byName["ASM2464PD 480M"]?.localizedDiagnosticDetail(zh).contains("线缆限速") == true)
+        #expect(byName["ASM2464PD 480M"]?.localizedDiagnosticDetail(zh).contains("无法判断是线还是口") == true)
+        #expect(byName["OWC Envoy NVMe"]?.localizedDiagnosticDetail(zh).contains("线缆限速") == true)
         #expect(byName["Portable SSD T7 Behind USB2 Hub"]?.localizedDiagnosticDetail(zh).contains("集线器限速") == true)
         #expect(byName["SuperSpeed Drive On USB2 Host Port"]?.localizedDiagnosticDetail(zh).contains("端口限速") == true)
     }
@@ -943,5 +944,98 @@ struct DiagnoserTests {
         let limitPortDev = try #require(byName["USB_PortLimit_Only"])
         #expect(limitPortDev.portCeilingGbps == nil)
         #expect(limitPortDev.verdict == .normal)
+    }
+
+    @Test("UR3: When port ceiling (or upstream hub ceiling) is unknown, throttled segment reports '无法判断是线还是口' instead of defaulting to cable")
+    @MainActor
+    func testUR3ThrottledWithUnknownPortCeilingReportsCannotDetermineCableOrPort() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        // 1. USB SuperSpeed device (bcdUSB 0x0210) at 480 Mb/s on port with nil ceiling -> must NOT default to cable
+        let usbEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(usbEval.verdict == .throttled)
+        #expect(usbEval.bottleneckSegment != .cable)
+        #expect(usbEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+        #expect(usbEval.bottleneckSegment?.localizedLabel(zh) == "无法判断是线还是口")
+        #expect(usbEval.bottleneckSegment?.localizedLabel(en).lowercased().contains("cannot determine") == true)
+
+        let devUnknownPort = AttachedBusDevice(
+            id: "ur3-usb",
+            name: "SyntheticSSDrive",
+            vendor: "Acme",
+            busName: "USB 3.1 Bus",
+            protocolKind: .usbHost,
+            negotiatedSpeedLabel: "480 Mb/s",
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            deviceMaxGbps: usbEval.deviceMaxGbps,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8]),
+            bottleneckSegment: usbEval.bottleneckSegment,
+            verdict: usbEval.verdict,
+            diagnosticDetail: usbEval.detail
+        )
+        #expect(devUnknownPort.localizedDiagnosticDetail(zh).contains("无法判断是线还是口"))
+        #expect(!devUnknownPort.localizedDiagnosticDetail(zh).contains("线缆限速"))
+
+        // 2. Thunderbolt 40G device at 20 Gb/s when host port ceiling is nil -> must NOT default to cable
+        let tbEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .thunderboltUSB4,
+            negotiatedGbps: 20.0,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0)
+        )
+        #expect(tbEval.verdict == .throttled)
+        #expect(tbEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+        #expect(tbEval.bottleneckSegment?.localizedLabel(zh) == "无法判断是线还是口")
+
+        // 3. Behind external hub whose speed is missing (nil) even when port ceiling is 10G -> must NOT blame cable by elimination
+        let hubUnknownEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: 10.0,
+            behindExternalHub: true,
+            upstreamHubGbps: nil,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(hubUnknownEval.verdict == .throttled)
+        #expect(hubUnknownEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+
+        // 4. Positive controls when ceilings ARE proven: cable, port, and hub remain distinct
+        let provenCable = BottleneckDiagnoser.evaluate(
+            protocolKind: .thunderboltUSB4,
+            negotiatedGbps: 20.0,
+            portCeilingGbps: 40.0,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0)
+        )
+        #expect(provenCable.bottleneckSegment == .cable)
+
+        let provenPort = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: 0.48,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(provenPort.bottleneckSegment == .port)
+
+        let provenHub = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            behindExternalHub: true,
+            upstreamHubGbps: 0.48,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(provenHub.bottleneckSegment == .hub)
     }
 }
