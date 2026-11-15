@@ -10,9 +10,9 @@
 
 不同规格的 USB-C 接口与线材在外观上几乎一致，但实际协商出的链路速率可能是 `40 Gb/s`（雷雳 4 / USB4）、`20 Gb/s`、`10 Gb/s`、`5 Gb/s`、`480 Mb/s`、`12 Mb/s` 或 `1.5 Mb/s`。**BusLens Mac** 将 `SPThunderboltDataType`、`SPUSBHostDataType`（含旧版 `SPUSBDataType` 回退解析）与 `SPPowerDataType` 整合为统一的只读桌面工作台窗口、菜单栏弹窗与可脚本化 CLI，全程无需 `sudo` 提权。
 
-## 当前功能（`未发布（v0.2.0 之后）` — M0）
+## 当前功能（`v0.3.0 起` — M0）
 
-> **版本说明：** 已发布的 `v0.2.0`（`main`）早于下方 M0 诚实化修订。AppKit 启动前 CLI 退出处理、`--json`、`--input`、`--demo`、`--help`、`--version`、`./Scripts/test.sh` 以及下述不依赖产品名猜测的三态结论均为 **未发布（v0.2.0 之后）**。
+> **版本说明：** 此前的 `v0.2.0` 早于下方 M0 诚实化修订。AppKit 启动前 CLI 退出处理、`--json`、`--input`、`--demo`、`--help`、`--version`、`./Scripts/test.sh` 以及下述不依赖产品名猜测的三态结论均自 **v0.3.0 起** 提供。
 
 - **逐设备真实协商速率解析** — 优先读取每个雷雳 / USB4 外设自身的 `receptacle_upstream_ambiguous_tag` 上行协商速率（含菊花链下级设备）及 USB 外设的 `USBDeviceKeyLinkSpeed`，不会用上游主控总线的 `40 Gb/s` 覆盖下挂设备的真实速率。
 - **诚实的三态速率结论（不看设备名猜测）** — `system_profiler` 仅提供“当前协商速率”，不包含外设自身的硬件最高支持速率或 USB 接口设备类。M0 完全不检查产品名或厂商字符串，仅输出三种基于速率事实的结论：
@@ -20,7 +20,7 @@
   2. **`低速外设（USB 1.x）` (`Low-speed peripheral`)** — 协商速率为 `1.5 Mb/s` 或 `12 Mb/s`（USB 1.x，`<= 0.0125 Gbps`）的链路，仅依据链路速率判定。
   3. **`无法判断是否被限速` (`Indeterminate`)** — 输出 `“实际速率 X，无法判断是否被限速。”`。所有低于显式总线上限的 `480 Mb/s`（USB 2.0）与 `5 Gb/s` / `10 Gb/s` / `20 Gb/s` 链路均标为 `无法判断是否被限速`，因为 `system_profiler` 不提供设备自身最高支持速率与设备类描述符（排在 M1 通过 `ioreg` 读取）。
 - **未知上限、结构化集线器识别与供电状态诚实展示** — 当 `system_profiler` 未在该总线上提供显式速率上限时显示 `未知`（不硬编码为 `10 Gb/s` 或 `40 Gb/s`，也不从同主机其他总线复制上限）；当 `SPPowerDataType` / `pmset` 未提供供电来源或低电量模式时显示 `未知`（JSON 为 `null`），不默认写成交流电源或关闭；通过 `USBKeyHardwareType: Built-in` / `Built-in_Device: Yes` 过滤 Apple 主板内置集线器，并仅凭下级 `_items` 结构或显式 USB 集线器类（`0x09`）识别外接集线器容器，从不根据名称包含 `"hub"` 隐藏设备。
-- **无界面 CLI 与 `--json` 结构化输出（`未发布（v0.2.0 之后）`）** — 在 AppKit / SwiftUI 启动前直接处理 `--cli`、`--help`、`--version` 与 `--export-screenshots` 并立即退出：成功返回 `0`，运行或输入错误返回 `1`，未知子命令或非法参数返回 `2`。
+- **无界面 CLI 与 `--json` 结构化输出（`v0.3.0 起`）** — 在 AppKit / SwiftUI 启动前直接处理 `--cli`、`--help`、`--version` 与 `--export-screenshots` 并立即退出：成功返回 `0`，运行或输入错误返回 `1`，未知子命令或非法参数返回 `2`。
 - **应用内 `中文 / EN` 实时切换与标识符脱敏** — 支持窗口与菜单栏顶部的 `中文 | EN` 胶囊按钮、快捷键 `⇧⌘L` 及命令行 `--lang zh|en`；解析阶段自动脱敏外设序列号与雷雳 UUID。
 
 <p align="center">
@@ -45,7 +45,7 @@
 
 ## 安装方式
 
-### Homebrew Cask 安装（已发布 `v0.2.0`）
+### Homebrew Cask 安装（`v0.3.0` 版本）
 
 ```bash
 brew install --cask zxu756/tap/buslens-mac
@@ -53,7 +53,7 @@ brew install --cask zxu756/tap/buslens-mac
 
 ### 从源码构建（macOS 14.0+，Apple Silicon）
 
-> `./Scripts/test.sh` 为 **未发布（v0.2.0 之后）**。
+> `./Scripts/test.sh` 自 **v0.3.0 起** 提供。
 
 ```bash
 git clone https://github.com/zxu756/BusLensMac.git
@@ -64,11 +64,11 @@ cd BusLensMac
 open build/BusLensMac.app
 ```
 
-如需以指定语言启动图形界面（或在窗口中查看带 `[演示数据]` 标记的合成拓扑，`未发布（v0.2.0 之后）`），可在直接调用二进制时传入 `--lang zh`、`--lang en` 或 `--demo`。
+如需以指定语言启动图形界面（或在窗口中查看带 `[演示数据]` 标记的合成拓扑，`v0.3.0 起`），可在直接调用二进制时传入 `--lang zh`、`--lang en` 或 `--demo`。
 
 ## 命令行用法
 
-> **版本范围：** `--cli topology`、`--lang zh|en` 与 `--export-screenshots <目录>` 已在 `v0.2.0` 提供；`--json`、`--input <路径>`、`--demo`、`--help`（`-h`）、`--version`（`-v`）及 AppKit 启动前退出码契约（`0` / `1` / `2`）为 **未发布（v0.2.0 之后）**。
+> **版本范围：** `--cli topology`、`--lang zh|en` 与 `--export-screenshots <目录>` 已在 `v0.2.0` 提供；`--json`、`--input <路径>`、`--demo`、`--help`（`-h`）、`--version`（`-v`）及 AppKit 启动前退出码契约（`0` / `1` / `2`）自 **v0.3.0 起** 提供。
 
 以下每条本地命令均以无界面模式直接运行并退出，由 [`Scripts/acceptance/readme-commands.sh`](Scripts/acceptance/readme-commands.sh) 自动逐条回放校验（输出记录见 [`reports/readme-commands.txt`](reports/readme-commands.txt)）：
 
@@ -77,15 +77,15 @@ open build/BusLensMac.app
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang zh
 
-# 输出结构化 JSON 拓扑数据 — 未发布（v0.2.0 之后）
+# 输出结构化 JSON 拓扑数据 — v0.3.0 起
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang zh
 
-# 解析已保存的 system_profiler -json 文件（替代实时采集） — 未发布（v0.2.0 之后）
+# 解析已保存的 system_profiler -json 文件（替代实时采集） — v0.3.0 起
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang zh
 
-# 显式查看内置合成 [演示数据] 拓扑 — 未发布（v0.2.0 之后）
+# 显式查看内置合成 [演示数据] 拓扑 — v0.3.0 起
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --demo --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --demo --lang zh
 
@@ -93,7 +93,7 @@ build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --demo --lang zh
 build/BusLensMac.app/Contents/MacOS/BusLensMac --export-screenshots .build/demo-shots --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --export-screenshots .build/demo-shots --lang zh
 
-# 查看命令行帮助与版本号 — 未发布（v0.2.0 之后）
+# 查看命令行帮助与版本号 — v0.3.0 起
 build/BusLensMac.app/Contents/MacOS/BusLensMac --help --lang en
 build/BusLensMac.app/Contents/MacOS/BusLensMac --help --lang zh
 build/BusLensMac.app/Contents/MacOS/BusLensMac --version

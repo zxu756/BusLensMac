@@ -39,7 +39,7 @@ assert "(m0/honest)" not in readme_en and "(m0/honest)" not in readme_zh, "READM
 for required_en in [
     "[DEMO]",
     "BusLensMonitor.preview()",
-    "Unreleased (after v0.2.0)",
+    "since v0.3.0",
     "Unverified on real hardware (synthetic fixtures only)",
     "Planned (M1)",
 ]:
@@ -48,7 +48,7 @@ for required_en in [
 for required_zh in [
     "[演示数据]",
     "BusLensMonitor.preview()",
-    "未发布（v0.2.0 之后）",
+    "v0.3.0 起",
     "尚未在真机上验证（仅合成样本测试）",
     "计划中（M1）",
 ]:
@@ -56,8 +56,8 @@ for required_zh in [
 
 assert "Unverified on real hardware (synthetic fixtures only)" in spec_md
 assert "尚未在真机上验证（仅合成样本测试）" in spec_md
-assert "Unreleased (after v0.2.0)" in spec_md
-print("[PASS] Documentation honesty & Unreleased (after v0.2.0) disclosures verified in README.md, README.zh-CN.md, and docs/SPEC.md")
+assert "since v0.3.0" in spec_md
+print("[PASS] Documentation honesty & since v0.3.0 disclosures verified in README.md, README.zh-CN.md, and docs/SPEC.md")
 
 # 2. Extract ALL fenced bash/sh commands from README.md and README.zh-CN.md
 def extract_all_bash_commands(markdown_text: str, doc_name: str) -> list[str]:
@@ -159,7 +159,7 @@ def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
         assert stderr == "" and "用法：" in stdout and "--cli topology" in stdout
         return stdout.strip().splitlines()[0]
     if cmd.endswith("--version"):
-        assert stderr == "" and "BusLens Mac 0.2.0" in stdout
+        assert stderr == "" and "BusLens Mac 0.3.0" in stdout
         return stdout.strip()
     raise AssertionError(f"Unhandled README command without explicit key-output assertion: {cmd}")
 

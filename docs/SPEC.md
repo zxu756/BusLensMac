@@ -1,10 +1,10 @@
-# BusLensMac — Engineering Specification (`Unreleased (after v0.2.0)` — M0)
+# BusLensMac — Engineering Specification (`since v0.3.0` — M0)
 
 ## 1. Scope & Honesty Contract (M0)
 
 USB-C ports and cables look identical on the outside regardless of whether a link negotiates `40 Gb/s` (Thunderbolt 4 / USB4), `20 Gb/s`, `10 Gb/s`, `5 Gb/s`, `480 Mb/s`, `12 Mb/s`, or `1.5 Mb/s`. Apple's built-in *System Information.app* splits Thunderbolt trees, USB host controllers, and AC / Power Delivery state across separate raw panels.
 
-In **M0 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-only GUI, menu-bar popover, and headless `--cli topology [--json]` inspector that lists attached Thunderbolt, USB4, and USB devices alongside the exact negotiated link speeds reported by `system_profiler`, with live `中文 / EN` switching.
+In **M0 (`since v0.3.0`)**, **BusLens Mac** provides a read-only GUI, menu-bar popover, and headless `--cli topology [--json]` inspector that lists attached Thunderbolt, USB4, and USB devices alongside the exact negotiated link speeds reported by `system_profiler`, with live `中文 / EN` switching.
 
 ### What M0 Does Not Claim
 - **Zero name-based classification**: `system_profiler` reports a link's *current negotiated speed*, not a peripheral's maximum hardware capability or USB interface class. Until M1 reads per-device USB/Thunderbolt capability and class descriptors from `ioreg`, BusLens Mac never inspects product or vendor names to guess whether a device is storage, a hub, or a keyboard/mouse/UPS (for example, `"Groups Backup Drive"`, `"Hidden Disk"`, `"Wooting 60HE"`, or `"Hubble Backup Drive"`).

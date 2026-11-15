@@ -215,6 +215,6 @@ struct CLITests {
 
         let ver = BusCLIRunner.execute(arguments: ["BusLensMac", "--version"])
         #expect(ver.exitCode == 0)
-        #expect(ver.stdout.contains("0.2.0"))
+        #expect(ver.stdout.contains("0.3.0"))
     }
 }

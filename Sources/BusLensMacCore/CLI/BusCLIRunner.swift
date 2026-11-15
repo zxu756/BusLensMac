@@ -138,7 +138,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
 }
 
 public enum BusCLIRunner {
-    public static let versionString = "0.2.0"
+    public static let versionString = "0.3.0"
 
     public static func isHeadlessInvocation(arguments: [String]) -> Bool {
         let tail = Array(arguments.dropFirst())
