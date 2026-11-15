@@ -10,8 +10,8 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
 - **Zero name-based classification**: BusLens Mac never inspects product or vendor names to guess whether a device is storage, a hub, or an input peripheral.
 - **Protocol-honest `Indeterminate` fallback**:
   - When `ioreg` descriptors are absent (e.g. offline `--input` without `--ioreg-input`), non-ceiling links report `Indeterminate` (`无法判断是否被限速`), and `--cli bottlenecks --input` without `--ioreg-input` exits `1`.
-  - Per USB 2.0 §9.6.1, Full-Speed (`12 Mb/s`) devices legally report `bcdUSB = 0x0200`; unless `DeviceQualifier` proves `480 Mb/s` High-Speed or USB class `3` proves HID, `bcdUSB = 0x0200` at `12 Mb/s` reports `Indeterminate`.
-  - Per USB 3.2 §9.6.1, USB 3.2 Gen 1x1 (`5 Gb/s`) devices can report `bcdUSB = 0x0320`; unless SuperSpeedPlus lane attributes expose an exact `10 Gb/s` or `20 Gb/s` ceiling, `bcdUSB = 0x0320` at `5 Gb/s` or `10 Gb/s` reports `Indeterminate`.
+  - Per USB 2.0 §9.6.1, Full-Speed (`12 Mb/s`) devices legally report `bcdUSB = 0x0200`; unless USB class `3` proves HID, `bcdUSB = 0x0200` at `12 Mb/s` reports `Indeterminate`.
+  - Per USB 3.2 §9.6.1, USB 3.2 Gen 1x1 (`5 Gb/s`) devices can report `bcdUSB = 0x0320`; because user-space `ioreg` does not expose SuperSpeedPlus sublink speed attributes, `bcdUSB = 0x0320` at `5 Gb/s` or `10 Gb/s` reports `Indeterminate`.
 - **No fabricated ceilings or power defaults**: Missing controller ceilings and missing `SPPowerDataType` / `pmset` fields remain `nil` (`null` in JSON) and render as `Unknown` (`未知`).
 - **Unverified hardware matrices**:
   - **macOS 14–15 legacy `SPUSBDataType` schema**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
@@ -45,7 +45,7 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
 1. **`fullRate`** (`Full bus rate` / `满速`) — Negotiated speed meets explicit port ceiling or `>= 40 Gb/s` without falling below proven device max capability.
 2. **`normal`** (`Normal` / `正常`) — Negotiated speed matches proven hardware capability (`0x0200` at `480 Mb/s`, `0x0300` at `5 Gb/s`, `0x0310` at `10 Gb/s`, or healthy `bDeviceClass == 17` Billboard).
 3. **`lowSpeedPeripheral`** (`HID peripheral` / `HID / 低速外设`) — Verified USB HID (`class == 3`) at `1.5 Mb/s` or `12 Mb/s` (`U14`).
-4. **`throttled`** (`Throttled` / `被限速`) — Proven device capability exceeds negotiated rate (e.g. BOS `bcdUSB == 0x0210` below `5 Gb/s`, `bcdUSB >= 0x0300` below `5 Gb/s`, `DeviceQualifier` below `480 Mb/s`, or Thunderbolt switch capability > negotiated bandwidth), classified into `port` (`端口限速`), `hub` (`集线器限速`), or `cable` (`线缆限速`).
+4. **`throttled`** (`Throttled` / `被限速`) — Proven device capability exceeds negotiated rate (e.g. BOS `bcdUSB == 0x0210` below `5 Gb/s`, `bcdUSB >= 0x0300` below `5 Gb/s`, or Thunderbolt switch capability > negotiated bandwidth), classified into `port` (`端口限速`), `hub` (`集线器限速`), or `cable` (`线缆限速`).
 5. **`indeterminate`** (`Indeterminate` / `无法判断是否被限速`) — Capability descriptors absent or USB specification ambiguous.
 
 ---

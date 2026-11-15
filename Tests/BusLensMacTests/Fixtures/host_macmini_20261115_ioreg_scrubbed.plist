@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Scrubbed Real Host IORegistry Capture (Read-Only)
+  Scrubbed IORegistry Capture (Read-Only)
+  Scrub Script: Scripts/scrub-ioreg.py
   Captured At (UTC): 2026-11-15T04:11:48Z
-  Host OS: macOS 27.0.1 (26A434) arm64
-  Commands:
-    1) /usr/sbin/ioreg -a -r -c AppleUSBHostPort -l
-    2) /usr/sbin/ioreg -a -r -c IOThunderboltSwitch -l
-  Privacy: Stripped all serial numbers, UUIDs, UIDs, ContainerIDs, DROM, Hop Table Paths, and user-client process names.
+  Original Command: /usr/sbin/ioreg -a -r -c AppleUSBHostPort -l ; /usr/sbin/ioreg -a -r -c IOThunderboltSwitch -l
+  Removed Keys: <uuid-dict-key>, Address, DROM, Elements, HPM Address, IOUserClientCreator, IOUserServerCDHash, IOUserServerName, Micro Address, PCI Path, Path, ReportDescriptor, SerialNumber, TRM Hash Set, TRM Transport ID, UID, USB Address, USB Serial Number, UUID, UsbDeviceSignature, UsbExclusiveOwner, UserPreferences, iSerialNumber, kOSBundleDextUniqueIdentifier, kUSBAddress, kUSBContainerID, kUSBSerialNumberString, sessionID
+  Synthetic Entries Added: 0
 -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">

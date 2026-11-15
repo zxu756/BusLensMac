@@ -132,7 +132,7 @@ public enum BottleneckDiagnoser {
             )
         }
 
-        if let devMax = capability?.exactMaxSpeedGbps, devMax > 0 {
+        if let devMax = capability?.tbSupportedLinkGbps, devMax > 0 {
             if negotiatedGbps + 0.01 < devMax {
                 let seg = classifyBottleneckSegment(
                     negotiatedGbps: negotiatedGbps,
@@ -219,21 +219,6 @@ public enum BottleneckDiagnoser {
 
         // 1. USB Billboard auxiliary controller (bDeviceClass == 17 / 0x11)
         if capability.isAuxiliaryBillboardEndpoint {
-            if capability.billboardAltModeFailed {
-                let seg = classifyBottleneckSegment(
-                    negotiatedGbps: negotiatedGbps,
-                    requiredSpeedGbps: 10.0,
-                    portCeilingGbps: portCeilingGbps,
-                    behindExternalHub: behindExternalHub,
-                    upstreamHubGbps: upstreamHubGbps
-                )
-                return DeviceDiagnosticEvaluation(
-                    verdict: .throttled,
-                    bottleneckSegment: seg,
-                    deviceMaxGbps: 10.0,
-                    detail: "Negotiated at \(rateLabel); USB Billboard reports USB-C Alt-Mode / USB4 failure (\(segmentPhraseEN(seg)))."
-                )
-            }
             return DeviceDiagnosticEvaluation(
                 verdict: .normal,
                 deviceMaxGbps: max(negotiatedGbps, 0.48),
@@ -241,73 +226,11 @@ public enum BottleneckDiagnoser {
             )
         }
 
-        // 2. Explicit exact device ceiling (e.g., from SuperSpeedPlus sublink capability descriptor)
-        if let exactMax = capability.exactMaxSpeedGbps, exactMax > 0 {
-            if negotiatedGbps + 0.0005 < exactMax {
-                let seg = classifyBottleneckSegment(
-                    negotiatedGbps: negotiatedGbps,
-                    requiredSpeedGbps: exactMax,
-                    portCeilingGbps: portCeilingGbps,
-                    behindExternalHub: behindExternalHub,
-                    upstreamHubGbps: upstreamHubGbps
-                )
-                return DeviceDiagnosticEvaluation(
-                    verdict: .throttled,
-                    bottleneckSegment: seg,
-                    deviceMaxGbps: exactMax,
-                    detail: throttledEnglishDetail(
-                        rateLabel: rateLabel,
-                        maxGbps: exactMax,
-                        isExactMax: true,
-                        segment: seg,
-                        portCeilingGbps: portCeilingGbps,
-                        upstreamHubGbps: upstreamHubGbps
-                    )
-                )
-            }
-            if capability.isVerifiedHIDPeripheral && negotiatedGbps <= usb1FullSpeedMaxGbps {
-                return DeviceDiagnosticEvaluation(
-                    verdict: .lowSpeedPeripheral,
-                    deviceMaxGbps: exactMax,
-                    detail: "Negotiated at \(rateLabel) (USB HID class 3 peripheral, normal)."
-                )
-            }
-            return DeviceDiagnosticEvaluation(
-                verdict: .normal,
-                deviceMaxGbps: exactMax,
-                detail: "Negotiated at \(rateLabel) (matches device capability \(formatSpeedGbps(exactMax)))."
-            )
-        }
-
-        // 3. Explicit minimum proven capability override if supplied
-        if let minProven = capability.minimumProvenSpeedGbps, minProven > 0, negotiatedGbps + 0.0005 < minProven {
-            let seg = classifyBottleneckSegment(
-                negotiatedGbps: negotiatedGbps,
-                requiredSpeedGbps: minProven,
-                portCeilingGbps: portCeilingGbps,
-                behindExternalHub: behindExternalHub,
-                upstreamHubGbps: upstreamHubGbps
-            )
-            return DeviceDiagnosticEvaluation(
-                verdict: .throttled,
-                bottleneckSegment: seg,
-                deviceMaxGbps: minProven,
-                detail: throttledEnglishDetail(
-                    rateLabel: rateLabel,
-                    maxGbps: minProven,
-                    isExactMax: false,
-                    segment: seg,
-                    portCeilingGbps: portCeilingGbps,
-                    upstreamHubGbps: upstreamHubGbps
-                )
-            )
-        }
-
-        // 4. USB Device Descriptor bcdUSB + USB-IF Device/Interface Class evaluation
+        // 2. USB Device Descriptor bcdUSB + USB-IF Device/Interface Class evaluation
         if let bcd = capability.bcdUSB {
             // SuperSpeed-capable device operating in USB 2.0/1.1 mode MUST report bcdUSB == 0x0210 (USB 3.2 §9.6.1),
             // or bcdUSB >= 0x0300.
-            if bcd == 0x0210 || bcd >= 0x0300 || capability.usb3PreferredOrRequired {
+            if bcd == 0x0210 || bcd >= 0x0300 {
                 let minSuperSpeed: Double = (bcd >= 0x0400) ? 20.0 : 5.0
                 if negotiatedGbps + 0.01 < minSuperSpeed {
                     let seg = classifyBottleneckSegment(
@@ -389,28 +312,6 @@ public enum BottleneckDiagnoser {
                     )
                 }
                 // Operating below 480 Mb/s (e.g. 12 Mb/s Full-Speed or 1.5 Mb/s Low-Speed):
-                if capability.hasDeviceQualifier {
-                    let seg = classifyBottleneckSegment(
-                        negotiatedGbps: negotiatedGbps,
-                        requiredSpeedGbps: 0.48,
-                        portCeilingGbps: portCeilingGbps,
-                        behindExternalHub: behindExternalHub,
-                        upstreamHubGbps: upstreamHubGbps
-                    )
-                    return DeviceDiagnosticEvaluation(
-                        verdict: .throttled,
-                        bottleneckSegment: seg,
-                        deviceMaxGbps: 0.48,
-                        detail: throttledEnglishDetail(
-                            rateLabel: rateLabel,
-                            maxGbps: 0.48,
-                            isExactMax: true,
-                            segment: seg,
-                            portCeilingGbps: portCeilingGbps,
-                            upstreamHubGbps: upstreamHubGbps
-                        )
-                    )
-                }
                 if capability.isVerifiedHIDPeripheral && negotiatedGbps <= usb1FullSpeedMaxGbps {
                     return DeviceDiagnosticEvaluation(
                         verdict: .lowSpeedPeripheral,
@@ -418,10 +319,10 @@ public enum BottleneckDiagnoser {
                         detail: "Negotiated at \(rateLabel) (USB HID class 3 peripheral, normal)."
                     )
                 }
-                // USB 2.0 §9.6.1 permits Full-Speed-only devices to report bcdUSB = 0x0200 without DeviceQualifier.
+                // USB 2.0 §9.6.1 permits Full-Speed-only devices to report bcdUSB = 0x0200.
                 return DeviceDiagnosticEvaluation(
                     verdict: .indeterminate,
-                    detail: "Negotiated at \(rateLabel); bcdUSB 0x\(String(format: "%04x", bcd)) without DeviceQualifier cannot distinguish Full-Speed-only hardware from throttled High-Speed."
+                    detail: "Negotiated at \(rateLabel); bcdUSB 0x\(String(format: "%04x", bcd)) alone cannot distinguish Full-Speed-only hardware from throttled High-Speed."
                 )
             }
 
@@ -444,31 +345,7 @@ public enum BottleneckDiagnoser {
             }
         }
 
-        // 5. No bcdUSB, but explicit DeviceQualifier proves 480 Mb/s while negotiated below 480 Mb/s
-        if capability.hasDeviceQualifier && negotiatedGbps < 0.47 {
-            let seg = classifyBottleneckSegment(
-                negotiatedGbps: negotiatedGbps,
-                requiredSpeedGbps: 0.48,
-                portCeilingGbps: portCeilingGbps,
-                behindExternalHub: behindExternalHub,
-                upstreamHubGbps: upstreamHubGbps
-            )
-            return DeviceDiagnosticEvaluation(
-                verdict: .throttled,
-                bottleneckSegment: seg,
-                deviceMaxGbps: 0.48,
-                detail: throttledEnglishDetail(
-                    rateLabel: rateLabel,
-                    maxGbps: 0.48,
-                    isExactMax: true,
-                    segment: seg,
-                    portCeilingGbps: portCeilingGbps,
-                    upstreamHubGbps: upstreamHubGbps
-                )
-            )
-        }
-
-        // 6. Verified HID class == 3 at 1.5 Mb/s or 12 Mb/s without bcdUSB
+        // 3. Verified HID class == 3 at 1.5 Mb/s or 12 Mb/s without bcdUSB
         if capability.isVerifiedHIDPeripheral && negotiatedGbps <= usb1FullSpeedMaxGbps {
             return DeviceDiagnosticEvaluation(
                 verdict: .lowSpeedPeripheral,
@@ -511,14 +388,6 @@ public enum BottleneckDiagnoser {
 
         // 3. Otherwise host port and any upstream hub support faster links -> cable / physical link bottleneck
         return .cable
-    }
-
-    private static func segmentPhraseEN(_ segment: BottleneckSegment) -> String {
-        switch segment {
-        case .cable: return "cable-limited"
-        case .hub: return "external hub-limited"
-        case .port: return "host port-limited"
-        }
     }
 
     private static func throttledEnglishDetail(
@@ -576,8 +445,8 @@ public enum BottleneckDiagnoser {
             return "实际速率 \(rate)（USB HID 第 3 类低速外设，正常）。"
         case .throttled:
             let isExact: Bool = {
-                if let exact = device.capability?.exactMaxSpeedGbps, exact > 0 { return true }
-                if device.capability?.bcdUSB == 0x0300 || device.capability?.hasDeviceQualifier == true { return true }
+                if let exact = device.capability?.tbSupportedLinkGbps, exact > 0 { return true }
+                if device.capability?.bcdUSB == 0x0300 { return true }
                 return false
             }()
             let capStr: String = {

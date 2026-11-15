@@ -246,15 +246,6 @@ struct DiagnoserTests {
                   "bInterfaceClass": 8
                 },
                 {
-                  "_name": "ThumbDrive HighSpeedQualifiedAt12M",
-                  "USBDeviceKeyVendorName": "Generic",
-                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
-                  "bcdUSB": "0x0200",
-                  "hasDeviceQualifier": true,
-                  "bDeviceClass": 0,
-                  "bInterfaceClass": 8
-                },
-                {
                   "_name": "Optical Mouse",
                   "USBDeviceKeyVendorName": "Generic",
                   "USBDeviceKeyLinkSpeed": "12 Mb/s",
@@ -276,10 +267,6 @@ struct DiagnoserTests {
         #expect(diskUSB3.negotiatedSpeedLabel == "12 Mb/s")
         #expect(diskUSB3.verdict == .throttled)
         #expect(diskUSB3.bottleneckSegment == .cable)
-
-        let diskHS = try #require(snap.devices.first { $0.name == "ThumbDrive HighSpeedQualifiedAt12M" })
-        #expect(diskHS.negotiatedSpeedLabel == "12 Mb/s")
-        #expect(diskHS.verdict == .throttled)
 
         let mouse = try #require(snap.devices.first { $0.name == "Optical Mouse" })
         #expect(mouse.negotiatedSpeedLabel == "12 Mb/s")
@@ -709,5 +696,252 @@ struct DiagnoserTests {
                 #expect(snap.devices[idx].verdict == expVerdict, "\(caseID)[\(idx)] verdict")
             }
         }
+    }
+
+    @Test("UR1: Unverified keys absent from real host ioreg/system_profiler (UsbDeviceMaxSpeedGbps, SuperSpeedPlusMaxSpeedGbps, Usb3LinkPreferred, hasDeviceQualifier, UsbBillboardAltModeFailed, UsbHostPortLinkSpeedLimit, MaxSpeedGbps, device_max_speed) do not affect collection or diagnostics")
+    @MainActor
+    func testUR1UnverifiedKeysAreIgnored() throws {
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TB_MaxSpeedGbps_Only",
+                  "device_name_key": "TB_MaxSpeedGbps_Only",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                },
+                {
+                  "_name": "TB_device_max_speed_Only",
+                  "device_name_key": "TB_device_max_speed_Only",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "9",
+                  "device_max_speed": "40 Gb/s",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                {
+                  "_name": "USB_IOReg_UsbDeviceMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01110000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB_Inline_UsbDeviceMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01120000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "bcdUSB": "0x0320",
+                  "UsbDeviceMaxSpeedGbps": 20
+                },
+                {
+                  "_name": "USB_SuperSpeedPlusMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01130000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB_device_max_speed",
+                  "USBKeyLocationID": "0x01140000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "bcdUSB": "0x0320",
+                  "device_max_speed": "20 Gb/s"
+                },
+                {
+                  "_name": "USB_Usb3LinkPreferred",
+                  "USBKeyLocationID": "0x01150000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "Usb3LinkPreferred": true
+                },
+                {
+                  "_name": "USB_hasDeviceQualifier",
+                  "USBKeyLocationID": "0x01160000",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "hasDeviceQualifier": true
+                },
+                {
+                  "_name": "USB_UsbBillboardAltModeFailed",
+                  "USBKeyLocationID": "0x01170000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "UsbBillboardAltModeFailed": true
+                },
+                {
+                  "_name": "USB_PortLimit_Only",
+                  "USBKeyLocationID": "0x02110000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        let ioregDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "bcdUSB": 0x0320,
+                            "bDeviceClass": 0,
+                            "UsbDeviceMaxSpeedGbps": 20,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01130000,
+                            "bcdUSB": 0x0320,
+                            "bDeviceClass": 0,
+                            "SuperSpeedPlusMaxSpeedGbps": 20,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01150000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "Usb3LinkPreferred": true,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01160000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "hasDeviceQualifier": true,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01170000,
+                            "bcdUSB": 0x0201,
+                            "bDeviceClass": 17,
+                            "UsbBillboardAltModeFailed": true
+                        ]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x02100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@2",
+                    "UsbHostPortLinkSpeedLimit": 5,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x02110000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltSwitchType3",
+                                    "Depth": 1,
+                                    "Route String": 1,
+                                    "Device Model Name": "TB_MaxSpeedGbps_Only",
+                                    "MaxSpeedGbps": 40
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: ioregDict, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        // 1. MaxSpeedGbps (TB ioreg)
+        let tbMaxKeyDev = try #require(byName["TB_MaxSpeedGbps_Only"])
+        #expect(tbMaxKeyDev.deviceMaxGbps == nil)
+        #expect(tbMaxKeyDev.verdict == .indeterminate)
+
+        // 2. device_max_speed (TB & USB SP JSON)
+        let tbSpMaxDev = try #require(byName["TB_device_max_speed_Only"])
+        #expect(tbSpMaxDev.deviceMaxGbps == nil)
+        #expect(tbSpMaxDev.verdict == .indeterminate)
+
+        let usbSpMaxDev = try #require(byName["USB_device_max_speed"])
+        #expect(usbSpMaxDev.deviceMaxGbps == nil)
+        #expect(usbSpMaxDev.verdict == .indeterminate)
+
+        // 3. UsbDeviceMaxSpeedGbps (ioreg & SP JSON)
+        let usbMaxIoreg = try #require(byName["USB_IOReg_UsbDeviceMaxSpeedGbps"])
+        #expect(usbMaxIoreg.deviceMaxGbps == nil)
+        #expect(usbMaxIoreg.verdict == .indeterminate)
+
+        let usbMaxInline = try #require(byName["USB_Inline_UsbDeviceMaxSpeedGbps"])
+        #expect(usbMaxInline.deviceMaxGbps == nil)
+        #expect(usbMaxInline.verdict == .indeterminate)
+
+        // 4. SuperSpeedPlusMaxSpeedGbps (ioreg)
+        let sspDev = try #require(byName["USB_SuperSpeedPlusMaxSpeedGbps"])
+        #expect(sspDev.deviceMaxGbps == nil)
+        #expect(sspDev.verdict == .indeterminate)
+
+        // 5. Usb3LinkPreferred (ioreg & SP JSON)
+        let prefDrive = try #require(byName["USB_Usb3LinkPreferred"])
+        #expect(prefDrive.verdict == .normal)
+
+        // 6. hasDeviceQualifier (ioreg & SP JSON)
+        let qualDrive = try #require(byName["USB_hasDeviceQualifier"])
+        #expect(qualDrive.verdict == .indeterminate)
+
+        // 7. UsbBillboardAltModeFailed (ioreg & SP JSON)
+        let billboard = try #require(byName["USB_UsbBillboardAltModeFailed"])
+        #expect(billboard.verdict == .normal)
+
+        // 8. UsbHostPortLinkSpeedLimit (ioreg port)
+        let limitPortDev = try #require(byName["USB_PortLimit_Only"])
+        #expect(limitPortDev.portCeilingGbps == nil)
+        #expect(limitPortDev.verdict == .normal)
     }
 }

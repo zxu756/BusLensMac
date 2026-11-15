@@ -323,18 +323,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
 
             let bcdUSB = parseInt(devNode["bcdUSB"])
             let devClass = parseInt(devNode["bDeviceClass"])
-            let hasQualifier = (devNode["DeviceQualifierDescriptor"] != nil)
-                || (parseBool(devNode["hasDeviceQualifier"]) == true)
-            let usb3Pref = (parseBool(devNode["Usb3LinkPreferred"]) == true)
-                || (parseBool(devNode["Usb3LinkRequired"]) == true)
-            let bbFailed = (parseBool(devNode["UsbBillboardAltModeFailed"]) == true)
-            let exactMax: Double? = {
-                if let d = devNode["UsbDeviceMaxSpeedGbps"] as? Double, d > 0 { return d }
-                if let i = parseInt(devNode["UsbDeviceMaxSpeedGbps"]), i > 0 { return Double(i) }
-                if let d2 = devNode["SuperSpeedPlusMaxSpeedGbps"] as? Double, d2 > 0 { return d2 }
-                if let i2 = parseInt(devNode["SuperSpeedPlusMaxSpeedGbps"]), i2 > 0 { return Double(i2) }
-                return nil
-            }()
 
             let resolvedHostPort: IORegistryUSBPortRecord? = {
                 if let ancestorHostLoc, let p = usbPorts[ancestorHostLoc] {
@@ -351,11 +339,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
             let cap = DeviceCapabilityDescriptor(
                 bcdUSB: bcdUSB,
                 usbDeviceClass: devClass,
-                usbInterfaceClasses: ifaceClasses,
-                hasDeviceQualifier: hasQualifier,
-                usb3PreferredOrRequired: usb3Pref,
-                billboardAltModeFailed: bbFailed,
-                exactMaxSpeedGbps: exactMax
+                usbInterfaceClasses: ifaceClasses
             )
             usbDevices[loc] = IORegistryUSBDeviceRecord(
                 locationID: loc,
@@ -507,20 +491,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
         portNode: [String: Any],
         parentHubLinkGbps: Double?
     ) -> Double? {
-        if let limit = parseInt(portNode["UsbHostPortLinkSpeedLimit"]) {
-            switch limit {
-            case 1: return 0.012
-            case 2: return 0.0015
-            case 3: return 0.48
-            case 4: return 5.0
-            case 5: return 10.0
-            case 6: return 20.0
-            default: break
-            }
-        }
-        if parseBool(portNode["UsbProtocol (4.0)"]) == true {
-            return 40.0
-        }
         if parseBool(portNode["UsbProtocol (3.x)"]) == true {
             if let parentHubLinkGbps, parentHubLinkGbps > 0 {
                 return parentHubLinkGbps
@@ -567,14 +537,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 let model = (node["Device Model Name"] as? String)
                     ?? (node["IORegistryEntryName"] as? String)
                     ?? ""
-                let explicitMax: Double? = {
-                    if let d = node["MaxSpeedGbps"] as? Double, d > 0 { return d }
-                    if let i = parseInt(node["MaxSpeedGbps"]), i > 0 { return Double(i) }
-                    if let parentPortNode, let decoded = decodeThunderboltSupportedMaxGbps(portNode: parentPortNode) {
-                        return decoded
-                    }
-                    return nil
-                }()
+                let explicitMax = parentPortNode.flatMap(decodeThunderboltSupportedMaxGbps)
                 let negotiated: Double? = {
                     if let parentPortNode, let bw = parseInt(parentPortNode["Link Bandwidth"]), bw > 0 {
                         return Double(bw) / 10.0
@@ -587,7 +550,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                         routeString: route,
                         modelName: model,
                         negotiatedGbps: negotiated,
-                        capability: DeviceCapabilityDescriptor(exactMaxSpeedGbps: explicitMax)
+                        capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: explicitMax)
                     )
                 )
             }

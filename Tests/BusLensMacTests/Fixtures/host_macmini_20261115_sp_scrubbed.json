@@ -2,8 +2,13 @@
   "_capture_metadata": {
     "captured_at_utc": "2026-11-15T04:11:48Z",
     "command": "/usr/sbin/system_profiler SPThunderboltDataType SPUSBHostDataType SPUSBDataType SPPowerDataType -json",
-    "host_os": "macOS 27.0.1 (26A434) arm64",
-    "scrubbed": "Stripped all serial numbers, UUIDs, UIDs, ContainerIDs, and user paths (read-only capture)"
+    "removed_keys": [
+      "USBDeviceKeySerialNumber",
+      "domain_uuid_key",
+      "switch_uid_key"
+    ],
+    "scrub_script": "Scripts/scrub-ioreg.py",
+    "synthetic_entries_added": 0
   },
   "SPPowerDataType": [
     {

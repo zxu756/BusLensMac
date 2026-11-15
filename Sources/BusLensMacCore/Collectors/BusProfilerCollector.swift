@@ -382,16 +382,7 @@ public enum BusProfilerCollector {
                 return fallbackGbps
             }()
 
-            let capability: DeviceCapabilityDescriptor? = {
-                if let tbCap = tbRecord?.capability {
-                    return tbCap
-                }
-                if let rawMax = item["device_max_speed"] as? String {
-                    let g = BottleneckDiagnoser.parseSpeedGbps(rawMax)
-                    if g > 0 { return DeviceCapabilityDescriptor(exactMaxSpeedGbps: g) }
-                }
-                return nil
-            }()
+            let capability = tbRecord?.capability
 
             let eval = BottleneckDiagnoser.evaluate(
                 protocolKind: .thunderboltUSB4,
@@ -481,35 +472,13 @@ public enum BusProfilerCollector {
                 }
             }
         }
-        let hasQualifier = parseBoolFlag(item["hasDeviceQualifier"] ?? item["DeviceQualifierDescriptor"]) ?? false
-        let usb3Pref = (parseBoolFlag(item["Usb3LinkPreferred"]) ?? false)
-            || (parseBoolFlag(item["Usb3LinkRequired"]) ?? false)
-        let bbFailed = parseBoolFlag(item["UsbBillboardAltModeFailed"]) ?? false
-        let exactMax: Double? = {
-            if let rawMax = item["device_max_speed"] as? String {
-                let g = BottleneckDiagnoser.parseSpeedGbps(rawMax)
-                return g > 0 ? g : nil
-            }
-            if let numMax = item["UsbDeviceMaxSpeedGbps"] as? Double, numMax > 0 {
-                return numMax
-            }
-            if let intMax = item["UsbDeviceMaxSpeedGbps"] as? Int, intMax > 0 {
-                return Double(intMax)
-            }
-            return nil
-        }()
-
-        if bcd == nil && devClass == nil && ifaceClasses.isEmpty && !hasQualifier && !usb3Pref && !bbFailed && exactMax == nil {
+        if bcd == nil && devClass == nil && ifaceClasses.isEmpty {
             return nil
         }
         return DeviceCapabilityDescriptor(
             bcdUSB: bcd,
             usbDeviceClass: devClass,
-            usbInterfaceClasses: ifaceClasses,
-            hasDeviceQualifier: hasQualifier,
-            usb3PreferredOrRequired: usb3Pref,
-            billboardAltModeFailed: bbFailed,
-            exactMaxSpeedGbps: exactMax
+            usbInterfaceClasses: ifaceClasses
         )
     }
 
@@ -540,11 +509,7 @@ public enum BusProfilerCollector {
             usbInterfaceClasses: !(inlineCap?.usbInterfaceClasses.isEmpty ?? true)
                 ? (inlineCap?.usbInterfaceClasses ?? [])
                 : (ioregCap?.usbInterfaceClasses ?? []),
-            hasDeviceQualifier: (inlineCap?.hasDeviceQualifier == true) || (ioregCap?.hasDeviceQualifier == true),
-            usb3PreferredOrRequired: (inlineCap?.usb3PreferredOrRequired == true) || (ioregCap?.usb3PreferredOrRequired == true),
-            billboardAltModeFailed: (inlineCap?.billboardAltModeFailed == true) || (ioregCap?.billboardAltModeFailed == true),
-            exactMaxSpeedGbps: inlineCap?.exactMaxSpeedGbps ?? ioregCap?.exactMaxSpeedGbps,
-            minimumProvenSpeedGbps: inlineCap?.minimumProvenSpeedGbps ?? ioregCap?.minimumProvenSpeedGbps
+            tbSupportedLinkGbps: inlineCap?.tbSupportedLinkGbps ?? ioregCap?.tbSupportedLinkGbps
         )
     }
 

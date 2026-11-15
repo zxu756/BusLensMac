@@ -40,30 +40,18 @@ public struct DeviceCapabilityDescriptor: Codable, Equatable, Sendable {
     public var bcdUSB: Int?
     public var usbDeviceClass: Int?
     public var usbInterfaceClasses: [Int]
-    public var hasDeviceQualifier: Bool
-    public var usb3PreferredOrRequired: Bool
-    public var billboardAltModeFailed: Bool
-    public var exactMaxSpeedGbps: Double?
-    public var minimumProvenSpeedGbps: Double?
+    public var tbSupportedLinkGbps: Double?
 
     public init(
         bcdUSB: Int? = nil,
         usbDeviceClass: Int? = nil,
         usbInterfaceClasses: [Int] = [],
-        hasDeviceQualifier: Bool = false,
-        usb3PreferredOrRequired: Bool = false,
-        billboardAltModeFailed: Bool = false,
-        exactMaxSpeedGbps: Double? = nil,
-        minimumProvenSpeedGbps: Double? = nil
+        tbSupportedLinkGbps: Double? = nil
     ) {
         self.bcdUSB = bcdUSB
         self.usbDeviceClass = usbDeviceClass
         self.usbInterfaceClasses = usbInterfaceClasses
-        self.hasDeviceQualifier = hasDeviceQualifier
-        self.usb3PreferredOrRequired = usb3PreferredOrRequired
-        self.billboardAltModeFailed = billboardAltModeFailed
-        self.exactMaxSpeedGbps = exactMaxSpeedGbps
-        self.minimumProvenSpeedGbps = minimumProvenSpeedGbps
+        self.tbSupportedLinkGbps = tbSupportedLinkGbps
     }
 
     /// True only when USB device/interface descriptors explicitly verify HID (class 3)

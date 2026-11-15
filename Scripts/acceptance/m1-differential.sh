@@ -517,7 +517,6 @@ with tempfile.TemporaryDirectory(prefix="buslens-m1-syn-") as tmpdir:
                 "locationID": 0x01200000,
                 "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
                 "UsbProtocol (3.x)": True,
-                "UsbHostPortLinkSpeedLimit": 5,
                 "IORegistryEntryChildren": [
                     {"IOObjectClass": "IOUSBHostDevice", "locationID": 0x01210000, "bcdUSB": 0x0320, "bDeviceClass": 0, "IORegistryEntryChildren": [{"IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8}]},
                     {"IOObjectClass": "IOUSBHostDevice", "locationID": 0x01220000, "bcdUSB": 0x0310, "bDeviceClass": 0, "IORegistryEntryChildren": [{"IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8}]},
@@ -801,8 +800,8 @@ m1_mutations = [
     (
         "M1_bcdUSB (disable bcdUSB == 0x0210 SuperSpeed-on-USB2 capability check)",
         "Sources/BusLensMacCore/Diagnostics/BottleneckDiagnoser.swift",
-        "if bcd == 0x0210 || bcd >= 0x0300 || capability.usb3PreferredOrRequired {",
-        "if bcd == 0x9999 || bcd >= 0x0300 || capability.usb3PreferredOrRequired {",
+        "if bcd == 0x0210 || bcd >= 0x0300 {",
+        "if bcd == 0x9999 || bcd >= 0x0300 {",
         "DiagnoserTests/testM1SixteenSyntheticScenariosWithIORegistryDescriptors",
         "M1 Row 4: All 16 synthetic hardware scenarios",
     ),
