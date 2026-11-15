@@ -294,7 +294,7 @@ struct CLITests {
         let ajazzEn = try #require(payloadEn.devices.first { $0.name == "AJAZZ AJ159 APEX" })
         #expect(ajazzEn.physicalPort == "Port-USB-C@6")
         #expect(ajazzEn.locationID == "0x02120000")
-        #expect(ajazzEn.portCeilingGbps == 10.0)
+        #expect(ajazzEn.portCeilingGbps == nil)
         #expect(ajazzEn.behindExternalHub == false)
         #expect(ajazzEn.verdict == "low_speed_peripheral")
         #expect(ajazzEn.verdictLabel == "HID peripheral")

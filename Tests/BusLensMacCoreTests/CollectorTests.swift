@@ -521,7 +521,7 @@ struct CollectorTests {
         #expect(names.contains("Hub Child SSD"))
     }
 
-    @Test("M1 Items 1 & 3 (U5): Real 2026-11-15 Mac mini system_profiler + ioreg pair maps physical ports (Port-USB-C@2, Port-USB-C@6), companion ceilings, TB capability, and HID class")
+    @Test("M1 Items 1 & 3 (U5): Real 2026-11-15 Mac mini system_profiler + ioreg pair maps physical ports (Port-USB-C@2, Port-USB-C@6), TB capability, and HID class without fabricating USB port ceilings")
     @MainActor
     func testM1Real20261115PairedFixtureAndPhysicalPortMapping() throws {
         let fixturesDir = Self.hostFixtureURL.deletingLastPathComponent()
@@ -543,7 +543,7 @@ struct CollectorTests {
 
         let receiver = try #require(snap.devices.first { $0.name == "AJAZZ AJ159 APEX" })
         #expect(receiver.negotiatedGbps == 0.012)
-        #expect(receiver.portCeilingGbps == 10.0)
+        #expect(receiver.portCeilingGbps == nil)
         #expect(receiver.physicalPort == "Port-USB-C@6")
         #expect(receiver.locationID == "0x02120000")
         #expect(receiver.behindExternalHub == false)
@@ -597,11 +597,11 @@ struct CollectorTests {
         let leftDev = try #require(twoFrontSnap.devices.first { $0.name == "Front Left Keyboard" })
         let rightChild = try #require(twoFrontSnap.devices.first { $0.name == "Downstream Drive On Hub Port 3" })
         #expect(leftDev.physicalPort == "Port-USB-C@5")
-        #expect(leftDev.portCeilingGbps == 10.0)
+        #expect(leftDev.portCeilingGbps == nil)
         #expect(leftDev.behindExternalHub == false)
 
         #expect(rightChild.physicalPort == "Port-USB-C@6")
-        #expect(rightChild.portCeilingGbps == 10.0)
+        #expect(rightChild.portCeilingGbps == nil)
         #expect(rightChild.behindExternalHub == true)
         #expect(rightChild.upstreamHubGbps == 0.48)
     }
@@ -836,5 +836,98 @@ struct CollectorTests {
         #expect(scrubbedText.contains("InstanceID"))
         #expect(scrubbedText.contains("Serial Number"))
         #expect(scrubbedText.contains("UID"))
+    }
+
+    @Test("UR2: USB 3.x and UsbProtocolCompanion (3.x) ports without explicit ceiling report nil / Unknown / 未知 instead of hardcoded 10 Gb/s")
+    @MainActor
+    func testUR2USBPortWithoutExplicitCeilingReportsNilInsteadOfHardcoded10Gbps() throws {
+        let syntheticSP = """
+        {
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                { "_name": "DirectSSDrive", "USBKeyLocationID": "0x01210000", "USBDeviceKeyLinkSpeed": "5 Gb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "CompanionUSB2Device", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "DanglingCompanionDevice", "USBKeyLocationID": "0x01310000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "DedicatedUSB2PortDevice", "USBKeyLocationID": "0x01410000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" }
+              ]
+            }
+          ]
+        }
+        """
+
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (2.0)": true,
+                    "UsbProtocolCompanion (3.x)": "IOService:/usb-ss@01200000",
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01110000, "bcdUSB": 0x0200, "bDeviceClass": 0]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01200000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01210000, "bcdUSB": 0x0300, "bDeviceClass": 0]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01300000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@3",
+                    "UsbProtocol (2.0)": true,
+                    "UsbProtocolCompanion (3.x)": "IOService:/usb-ss@09900000",
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01310000, "bcdUSB": 0x0200, "bDeviceClass": 0]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x01400000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-A@1",
+                    "UsbProtocol (2.0)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01410000, "bcdUSB": 0x0200, "bDeviceClass": 0]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        for name in ["DirectSSDrive", "CompanionUSB2Device", "DanglingCompanionDevice"] {
+            let dev = try #require(byName[name])
+            #expect(dev.portCeilingGbps == nil, "\(name) portCeilingGbps must be nil, not hardcoded 10.0 or 0.48")
+            #expect(dev.localizedPortCeilingLabel(en) == "Unknown")
+            #expect(dev.localizedPortCeilingLabel(zh) == "未知")
+        }
+
+        let usb2Only = try #require(byName["DedicatedUSB2PortDevice"])
+        #expect(usb2Only.portCeilingGbps == 0.48)
+
+        // Real host Mac mini 2026-11-15 USB-C@6 port under internal USB3 Gen2 Hub also has no per-port ceiling in ioreg
+        let fixturesDir = Self.hostFixtureURL.deletingLastPathComponent()
+        let spData = try Data(contentsOf: fixturesDir.appendingPathComponent("host_macmini_20261115_sp_scrubbed.json"))
+        let hostIoregData = try Data(contentsOf: fixturesDir.appendingPathComponent("host_macmini_20261115_ioreg_scrubbed.plist"))
+        let hostIoregSnap = try IORegistrySnapshot.parsePlistData(hostIoregData)
+        let hostSnap = try BusProfilerCollector.parseSystemProfilerJSONValidated(spData, ioregSnapshot: hostIoregSnap)
+        let receiver = try #require(hostSnap.devices.first { $0.name == "AJAZZ AJ159 APEX" })
+        #expect(receiver.portCeilingGbps == nil)
+        #expect(receiver.localizedPortCeilingLabel(en) == "Unknown")
+        #expect(receiver.localizedPortCeilingLabel(zh) == "未知")
     }
 }

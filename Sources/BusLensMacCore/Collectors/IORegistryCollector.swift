@@ -276,7 +276,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
             walkUSBRegistryNode(
                 root,
                 parentHubIsInternal: true,
-                parentHubLinkGbps: nil,
                 currentHostPortLoc: nil,
                 usbPorts: &usbPorts,
                 rawDeviceNodes: &rawDeviceNodes,
@@ -285,6 +284,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
         }
 
         // Cross-propagate companion USB 3.x port ceilings onto USB 2.0 companion ports sharing the same physical receptacle
+        // only when the companion port itself exposes a concrete ceiling; otherwise leave nil (unknown).
         let initialPorts = usbPorts
         for (loc, var portRec) in initialPorts {
             if let compLoc = portRec.companionLocationID {
@@ -292,9 +292,8 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 if let compCeiling, compCeiling > (portRec.portCeilingGbps ?? 0) {
                     portRec.portCeilingGbps = compCeiling
                     usbPorts[loc] = portRec
-                } else if portRec.portCeilingGbps == nil || (portRec.portCeilingGbps ?? 0) < 5.0 {
-                    // Companion path explicitly points to a 3.x XHCI service path even if companion node omitted
-                    portRec.portCeilingGbps = max(portRec.portCeilingGbps ?? 0, 10.0)
+                } else if compCeiling == nil, portRec.portCeilingGbps != nil {
+                    portRec.portCeilingGbps = nil
                     usbPorts[loc] = portRec
                 }
             }
@@ -411,7 +410,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
     private static func walkUSBRegistryNode(
         _ node: [String: Any],
         parentHubIsInternal: Bool,
-        parentHubLinkGbps: Double?,
         currentHostPortLoc: UInt32?,
         usbPorts: inout [UInt32: IORegistryUSBPortRecord],
         rawDeviceNodes: inout [(node: [String: Any], ancestorHostLoc: UInt32?)],
@@ -419,7 +417,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
     ) {
         let cls = (node["IOObjectClass"] as? String) ?? ""
         var nextInternal = parentHubIsInternal
-        var nextHubLinkGbps = parentHubLinkGbps
         var nextHostPortLoc = currentHostPortLoc
 
         if cls.contains("USB") && cls.hasSuffix("Port"), let loc = parseLocationID(node["locationID"]) {
@@ -449,7 +446,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 return 0 // Sentinel indicating a 3.x companion exists even without an @location suffix
             }()
 
-            let ownCeiling = computeOwnUSBPortCeilingGbps(portNode: node, parentHubLinkGbps: parentHubLinkGbps)
+            let ownCeiling = computeOwnUSBPortCeilingGbps(portNode: node)
             usbPorts[loc] = IORegistryUSBPortRecord(
                 locationID: loc,
                 portNumber: portNum,
@@ -467,9 +464,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
             let portType = parseInt(node["USBPortType"])
             let isInternalDev = (portType == 1 || portType == 2)
             nextInternal = isInternalDev
-            if let bps = parseInt64(node["UsbLinkSpeed"]), bps > 0 {
-                nextHubLinkGbps = Double(bps) / 1_000_000_000.0
-            }
         }
 
         if let children = node["IORegistryEntryChildren"] as? [[String: Any]] {
@@ -477,7 +471,6 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 walkUSBRegistryNode(
                     ch,
                     parentHubIsInternal: nextInternal,
-                    parentHubLinkGbps: nextHubLinkGbps,
                     currentHostPortLoc: nextHostPortLoc,
                     usbPorts: &usbPorts,
                     rawDeviceNodes: &rawDeviceNodes,
@@ -488,17 +481,13 @@ public struct IORegistrySnapshot: Equatable, Sendable {
     }
 
     private static func computeOwnUSBPortCeilingGbps(
-        portNode: [String: Any],
-        parentHubLinkGbps: Double?
+        portNode: [String: Any]
     ) -> Double? {
         if parseBool(portNode["UsbProtocol (3.x)"]) == true {
-            if let parentHubLinkGbps, parentHubLinkGbps > 0 {
-                return parentHubLinkGbps
-            }
-            return 10.0
+            return nil
         }
         if portNode["UsbProtocolCompanion (3.x)"] != nil {
-            return 10.0
+            return nil
         }
         if parseBool(portNode["UsbProtocol (2.0)"]) == true {
             return 0.48
@@ -506,7 +495,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
         if parseBool(portNode["UsbProtocol (1.x)"]) == true {
             return 0.012
         }
-        return parentHubLinkGbps
+        return nil
     }
 
     private static func collectInterfaceClasses(in deviceNode: [String: Any], into out: inout [Int]) {
