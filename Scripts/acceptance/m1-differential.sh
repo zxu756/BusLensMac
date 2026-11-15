@@ -176,8 +176,6 @@ def walk_usb_oracle(node: dict, parent_internal: bool, current_host_port: str | 
         port_label = None
         if isinstance(io_port, str) and "/" in io_port:
             port_label = io_port.rsplit("/", 1)[-1]
-        elif isinstance(port_num, int) and port_num > 0:
-            port_label = f"Port-USB-C@{port_num}"
         if isinstance(port_num, int) and port_label:
             socket_to_port[str(port_num)] = port_label
         if parent_internal and (port_label or "XHCIPort" in cls or "XHCIARMPort" in cls):
@@ -224,7 +222,8 @@ for tb_root in tb_ioreg:
             sid = ch.get("Socket ID")
             if sid is not None:
                 sid_s = str(sid)
-                tb_router_to_port[router_id] = socket_to_port.get(sid_s, f"Port-USB-C@{sid_s}")
+                if sid_s in socket_to_port:
+                    tb_router_to_port[router_id] = socket_to_port[sid_s]
                 break
 
 # Independently enumerate external devices from system_profiler + ioreg oracle
@@ -253,7 +252,7 @@ for tb_bus in sp_json.get("SPThunderboltDataType", []) or []:
             if k.startswith("receptacle_") and k.endswith("_tag") and isinstance(v, dict):
                 rid = v.get("receptacle_id_key")
                 if rid:
-                    phys_port = socket_to_port.get(str(rid), f"Port-USB-C@{rid}")
+                    phys_port = socket_to_port.get(str(rid))
                     break
     bus_spd = 0.0
     for k, v in tb_bus.items():
@@ -828,6 +827,14 @@ m1_mutations = [
         "    private static func extractPhysicalPortLabel(usbIOPort: String?, portNumber: Int?) -> String? {\n        if usbIOPort != nil || portNumber != nil { return nil }",
         "CollectorTests/testM1Real20261115PairedFixtureAndPhysicalPortMapping",
         "M1 Items 1 & 3 (U5): Real 2026-11-15 Mac mini",
+    ),
+    (
+        "M5_UR4_usbIOPort (remove UsbIOPort property read to verify PortNumber never synthesizes Port-USB-C@N)",
+        "Sources/BusLensMacCore/Collectors/IORegistryCollector.swift",
+        'let ioPortPath = node["UsbIOPort"] as? String',
+        "let ioPortPath: String? = nil",
+        "CollectorTests/testUR4MissingUsbIOPortReportsUnknownAndDistinguishesReadFromPortNumberConcat",
+        "UR4: Missing UsbIOPort reports nil / Unknown / 未知",
     ),
 ]
 

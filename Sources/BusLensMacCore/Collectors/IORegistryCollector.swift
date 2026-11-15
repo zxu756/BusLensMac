@@ -384,10 +384,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
 
             let portLabel: String? = {
                 guard let sid = hostSocketID else { return nil }
-                if let mapped = socketToPort[sid] {
-                    return mapped
-                }
-                return "Port-USB-C@\(sid)"
+                return socketToPort[sid]
             }()
 
             tbBuses[routerID] = IORegistryThunderboltBusRecord(
@@ -581,13 +578,11 @@ public struct IORegistrySnapshot: Equatable, Sendable {
     }
 
     private static func extractPhysicalPortLabel(usbIOPort: String?, portNumber: Int?) -> String? {
+        _ = portNumber
         if let usbIOPort, !usbIOPort.isEmpty {
             if let last = usbIOPort.split(separator: "/").last, !last.isEmpty {
                 return String(last)
             }
-        }
-        if let portNumber, portNumber > 0 {
-            return "Port-USB-C@\(portNumber)"
         }
         return nil
     }

@@ -127,7 +127,7 @@ public enum BusProfilerCollector {
                     if let rid = rec?["receptacle_id_key"] as? String,
                        !rid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         let trimmed = rid.trimmingCharacters(in: .whitespacesAndNewlines)
-                        return ioregSnapshot?.socketToPhysicalPort[trimmed] ?? "Port-USB-C@\(trimmed)"
+                        return ioregSnapshot?.socketToPhysicalPort[trimmed]
                     }
                     return nil
                 }()

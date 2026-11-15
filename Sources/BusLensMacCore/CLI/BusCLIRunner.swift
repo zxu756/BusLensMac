@@ -86,6 +86,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
         public let vendor: String
         public let busName: String
         public let physicalPort: String?
+        public let physicalPortLabel: String
         public let locationID: String?
         public let protocolKind: String
         public let negotiatedGbps: Double
@@ -104,7 +105,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
         public let diagnosticDetail: String
 
         enum CodingKeys: String, CodingKey {
-            case id, name, vendor, busName, physicalPort, locationID, protocolKind
+            case id, name, vendor, busName, physicalPort, physicalPortLabel, locationID, protocolKind
             case negotiatedGbps, negotiatedSpeedLabel, deviceMaxGbps, deviceMaxSpeedLabel
             case portCeilingGbps, portCeilingLabel
             case depth, behindExternalHub, modeDescription, verdict, verdictLabel
@@ -122,6 +123,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
             } else {
                 try c.encodeNil(forKey: .physicalPort)
             }
+            try c.encode(physicalPortLabel, forKey: .physicalPortLabel)
             if let locationID {
                 try c.encode(locationID, forKey: .locationID)
             } else {
@@ -583,6 +585,7 @@ public enum BusCLIRunner {
                     vendor: dev.localizedVendor(localizer),
                     busName: dev.localizedBusName(localizer),
                     physicalPort: dev.physicalPort,
+                    physicalPortLabel: dev.localizedPhysicalPortLabel(localizer),
                     locationID: dev.locationID,
                     protocolKind: dev.protocolKind.localizedTitle(localizer),
                     negotiatedGbps: dev.negotiatedGbps,
@@ -650,7 +653,12 @@ public enum BusCLIRunner {
             let ceiling = dev.localizedPortCeilingLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
             let bus = dev.localizedBusName(localizer)
-            let portSuffix = (dev.physicalPort?.isEmpty == false) ? " [\(dev.physicalPort!)]" : ""
+            let portSuffix: String = {
+                if let p = dev.physicalPort, !p.isEmpty {
+                    return " [\(p)]"
+                }
+                return localizer.L(" [port: Unknown]", " [端口：未知]")
+            }()
             let detail = dev.localizedDiagnosticDetail(localizer)
             let ceilingTag = localizer.L("ceiling: \(ceiling)", "上限：\(ceiling)")
             lines.append("\(rate)  [\(state)]  \(dev.name) (\(vendor)) — \(bus)\(portSuffix) (\(ceilingTag)) — \(detail)")
@@ -689,7 +697,12 @@ public enum BusCLIRunner {
             let rate = padRightColumns(dev.negotiatedSpeedLabel, minColumns: rateWidth)
             let seg = dev.bottleneckSegment?.localizedLabel(localizer) ?? dev.verdict.localizedLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
-            let portSuffix = (dev.physicalPort?.isEmpty == false) ? " [\(dev.physicalPort!)]" : ""
+            let portSuffix: String = {
+                if let p = dev.physicalPort, !p.isEmpty {
+                    return " [\(p)]"
+                }
+                return localizer.L(" [port: Unknown]", " [端口：未知]")
+            }()
             lines.append("\(rate)  [\(seg)]  \(dev.name) (\(vendor))\(portSuffix) — \(dev.localizedDiagnosticDetail(localizer))")
         }
         return lines.joined(separator: "\n") + "\n"

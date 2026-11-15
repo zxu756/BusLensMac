@@ -476,7 +476,7 @@ public struct BusDashboardView: View {
 
             // Topology Path
             VStack(alignment: .leading, spacing: 2) {
-                Text(dev.physicalPort != nil ? "\(dev.localizedBusName(localizer)) · \(dev.physicalPort!)" : dev.localizedBusName(localizer))
+                Text(Self.topologyPortLine(for: dev, localizer: localizer))
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(BenchTheme.ink)
                     .lineLimit(1)
@@ -535,5 +535,16 @@ public struct BusDashboardView: View {
             }
         }
         .background(isWarn ? BenchTheme.signalOrange.opacity(0.055) : BenchTheme.plate)
+    }
+
+    @MainActor
+    public static func topologyPortLine(for dev: AttachedBusDevice, localizer: AppLocalizer) -> String {
+        let portDisplay: String = {
+            if let p = dev.physicalPort, !p.isEmpty {
+                return p
+            }
+            return localizer.L("Port: Unknown", "端口：未知")
+        }()
+        return "\(dev.localizedBusName(localizer)) · \(portDisplay)"
     }
 }

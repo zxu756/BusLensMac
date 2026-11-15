@@ -219,6 +219,14 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     }
 
     @MainActor
+    public func localizedPhysicalPortLabel(_ localizer: AppLocalizer) -> String {
+        if let physicalPort, !physicalPort.isEmpty {
+            return physicalPort
+        }
+        return localizer.L("Unknown", "未知")
+    }
+
+    @MainActor
     public func localizedDeviceMaxLabel(_ localizer: AppLocalizer) -> String? {
         guard let deviceMaxGbps, deviceMaxGbps > 0 else { return nil }
         return BottleneckDiagnoser.formatSpeedGbps(deviceMaxGbps, localizer: localizer)

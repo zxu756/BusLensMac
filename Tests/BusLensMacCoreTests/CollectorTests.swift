@@ -930,4 +930,191 @@ struct CollectorTests {
         #expect(receiver.localizedPortCeilingLabel(en) == "Unknown")
         #expect(receiver.localizedPortCeilingLabel(zh) == "未知")
     }
+
+    @Test("UR4: Missing UsbIOPort reports nil / Unknown / 未知 (never synthesized from PortNumber or Socket ID), and reading UsbIOPort is distinguished from PortNumber concatenation")
+    @MainActor
+    func testUR4MissingUsbIOPortReportsUnknownAndDistinguishesReadFromPortNumberConcat() throws {
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "4",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBUnmappedDrive",
+                  "device_name_key": "TBUnmappedDrive",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "usb4",
+                  "route_string_key": "1"
+                }
+              ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "9",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBMappedCustomSlotDrive",
+                  "device_name_key": "TBMappedCustomSlotDrive",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "usb4",
+                  "route_string_key": "1"
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                { "_name": "NoUsbIOPortWithPortNumber3", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "MismatchedPortNum2UsbIOPort7", "USBKeyLocationID": "0x01210000", "USBDeviceKeyLinkSpeed": "5 Gb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "CustomLeafPortDevice", "USBKeyLocationID": "0x01310000", "USBDeviceKeyLinkSpeed": "5 Gb/s", "USBDeviceKeyVendorName": "Acme" }
+              ]
+            }
+          ]
+        }
+        """
+
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                // 1. Has PortNumber = 3 and port = 1, but NO UsbIOPort -> must be nil (Unknown), NEVER Port-USB-C@3
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "PortNumber": 3,
+                    "port": 1,
+                    "UsbProtocol (2.0)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01110000, "bcdUSB": 0x0200, "bDeviceClass": 0]
+                    ]
+                ],
+                // 2. PortNumber = 2, UsbIOPort leaf = Port-USB-C@7 -> must read Port-USB-C@7, NOT Port-USB-C@2
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01200000,
+                    "PortNumber": 2,
+                    "UsbIOPort": "IOService:/AppleARMPE/arm-io/Port-USB-C@7",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01210000, "bcdUSB": 0x0300, "bDeviceClass": 0]
+                    ]
+                ],
+                // 3. PortNumber = 9, UsbIOPort leaf = Rear-Slot-A -> proves label comes from UsbIOPort, also maps Socket ID "9"
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01300000,
+                    "PortNumber": 9,
+                    "UsbIOPort": "IOService:/AppleARMPE/arm-io/Rear-Slot-A",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01310000, "bcdUSB": 0x0300, "bDeviceClass": 0]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                // Router 0 has Socket ID "4", which has NO UsbIOPort entry -> must be nil (Unknown), NEVER Port-USB-C@4
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "4",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 400,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOThunderboltSwitchType5", "Depth": 1, "Route String": 1, "Device Model Name": "TBUnmappedDrive"]
+                            ]
+                        ]
+                    ]
+                ],
+                // Router 1 has Socket ID "9", which maps via PortNumber 9's UsbIOPort to "Rear-Slot-A"
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 1,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "9",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 400,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOThunderboltSwitchType5", "Depth": 1, "Route String": 1, "Device Model Name": "TBMappedCustomSlotDrive"]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        let unmappedUSB = try #require(byName["NoUsbIOPortWithPortNumber3"])
+        #expect(unmappedUSB.physicalPort == nil, "Missing UsbIOPort must be nil, never synthesized as Port-USB-C@3")
+        #expect(unmappedUSB.localizedPhysicalPortLabel(en) == "Unknown")
+        #expect(unmappedUSB.localizedPhysicalPortLabel(zh) == "未知")
+        #expect(BusDashboardView.topologyPortLine(for: unmappedUSB, localizer: en).contains("Port: Unknown"))
+        #expect(BusDashboardView.topologyPortLine(for: unmappedUSB, localizer: zh).contains("端口：未知"))
+
+        let unmappedTB = try #require(byName["TBUnmappedDrive"])
+        #expect(unmappedTB.physicalPort == nil, "Missing UsbIOPort for Socket ID 4 must be nil, never synthesized as Port-USB-C@4")
+        #expect(unmappedTB.localizedPhysicalPortLabel(en) == "Unknown")
+        #expect(unmappedTB.localizedPhysicalPortLabel(zh) == "未知")
+
+        let mismatched = try #require(byName["MismatchedPortNum2UsbIOPort7"])
+        #expect(mismatched.physicalPort == "Port-USB-C@7")
+        #expect(mismatched.localizedPhysicalPortLabel(en) == "Port-USB-C@7")
+
+        let customUSB = try #require(byName["CustomLeafPortDevice"])
+        #expect(customUSB.physicalPort == "Rear-Slot-A")
+
+        let customTB = try #require(byName["TBMappedCustomSlotDrive"])
+        #expect(customTB.physicalPort == "Rear-Slot-A")
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let jsonZh = try BusCLIRunner.renderTopologyJSON(snapshot: snap, localizer: zh, isDemo: false)
+        let payloadZh = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(jsonZh.utf8))
+        let payloadMapZh = Dictionary(uniqueKeysWithValues: payloadZh.devices.map { ($0.name, $0) })
+        #expect(payloadMapZh["NoUsbIOPortWithPortNumber3"]?.physicalPort == nil)
+        #expect(payloadMapZh["NoUsbIOPortWithPortNumber3"]?.physicalPortLabel == "未知")
+        #expect(payloadMapZh["MismatchedPortNum2UsbIOPort7"]?.physicalPort == "Port-USB-C@7")
+        #expect(payloadMapZh["MismatchedPortNum2UsbIOPort7"]?.physicalPortLabel == "Port-USB-C@7")
+
+        let textEn = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: en, isDemo: false)
+        let textZh = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: zh, isDemo: false)
+        #expect(!textEn.contains("Port-USB-C@3"))
+        #expect(!textEn.contains("Port-USB-C@4"))
+        #expect(textEn.contains("[port: Unknown]"))
+        #expect(textEn.contains("[Port-USB-C@7]"))
+        #expect(textEn.contains("[Rear-Slot-A]"))
+        #expect(!textZh.contains("Port-USB-C@3"))
+        #expect(!textZh.contains("Port-USB-C@4"))
+        #expect(textZh.contains("[端口：未知]"))
+        #expect(textZh.contains("[Port-USB-C@7]"))
+        #expect(textZh.contains("[Rear-Slot-A]"))
+    }
 }
