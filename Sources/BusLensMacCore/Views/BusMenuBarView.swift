@@ -125,7 +125,7 @@ public struct BusMenuBarView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(BenchTheme.ink)
                                 .lineLimit(1)
-                            Text("\(dev.localizedVendor(localizer)) · \(dev.verdict.localizedLabel(localizer))")
+                            Text("\(dev.localizedVendor(localizer)) · \(dev.localizedVerdictLabel(localizer))")
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.muted)
                                 .lineLimit(1)

@@ -98,6 +98,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
         public let depth: Int
         public let behindExternalHub: Bool
         public let modeDescription: String
+        public let isInferred: Bool
         public let verdict: String
         public let verdictLabel: String
         public let bottleneckSegment: String?
@@ -108,7 +109,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
             case id, name, vendor, busName, physicalPort, physicalPortLabel, locationID, protocolKind
             case negotiatedGbps, negotiatedSpeedLabel, deviceMaxGbps, deviceMaxSpeedLabel
             case portCeilingGbps, portCeilingLabel
-            case depth, behindExternalHub, modeDescription, verdict, verdictLabel
+            case depth, behindExternalHub, modeDescription, isInferred, verdict, verdictLabel
             case bottleneckSegment, bottleneckSegmentLabel, diagnosticDetail
         }
 
@@ -151,6 +152,7 @@ public struct BusCLITopologyJSONPayload: Codable, Equatable, Sendable {
             try c.encode(depth, forKey: .depth)
             try c.encode(behindExternalHub, forKey: .behindExternalHub)
             try c.encode(modeDescription, forKey: .modeDescription)
+            try c.encode(isInferred, forKey: .isInferred)
             try c.encode(verdict, forKey: .verdict)
             try c.encode(verdictLabel, forKey: .verdictLabel)
             if let bottleneckSegment {
@@ -597,10 +599,11 @@ public enum BusCLIRunner {
                     depth: dev.depth,
                     behindExternalHub: dev.behindExternalHub,
                     modeDescription: dev.localizedModeDescription(localizer),
+                    isInferred: dev.isInferred,
                     verdict: dev.verdict.jsonCode,
-                    verdictLabel: dev.verdict.localizedLabel(localizer),
+                    verdictLabel: dev.localizedVerdictLabel(localizer),
                     bottleneckSegment: dev.bottleneckSegment?.rawValue,
-                    bottleneckSegmentLabel: dev.bottleneckSegment?.localizedLabel(localizer),
+                    bottleneckSegmentLabel: dev.localizedBottleneckSegmentLabel(localizer),
                     diagnosticDetail: dev.localizedDiagnosticDetail(localizer)
                 )
             }
@@ -645,11 +648,11 @@ public enum BusCLIRunner {
         }
 
         let rateWidth = max(10, snapshot.devices.map { displayColumnWidth($0.negotiatedSpeedLabel) }.max() ?? 10)
-        let verdictWidth = max(16, snapshot.devices.map { displayColumnWidth($0.verdict.localizedLabel(localizer)) }.max() ?? 16)
+        let verdictWidth = max(16, snapshot.devices.map { displayColumnWidth($0.localizedVerdictLabel(localizer)) }.max() ?? 16)
 
         for dev in snapshot.devices {
             let rate = padRightColumns(dev.negotiatedSpeedLabel, minColumns: rateWidth)
-            let state = padRightColumns(dev.verdict.localizedLabel(localizer), minColumns: verdictWidth)
+            let state = padRightColumns(dev.localizedVerdictLabel(localizer), minColumns: verdictWidth)
             let ceiling = dev.localizedPortCeilingLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
             let bus = dev.localizedBusName(localizer)
@@ -688,14 +691,27 @@ public enum BusCLIRunner {
             return lines.joined(separator: "\n") + "\n"
         }
 
-        lines.append(localizer.L(
-            "Throttled links detected: \(throttled.count)",
-            "检测到被限速链路：\(throttled.count) 条"
-        ))
+        let inferredThrottledCount = throttled.filter(\.isInferred).count
+        if inferredThrottledCount == 0 {
+            lines.append(localizer.L(
+                "Throttled links detected: \(throttled.count)",
+                "检测到被限速链路：\(throttled.count) 条"
+            ))
+        } else if inferredThrottledCount == throttled.count {
+            lines.append(localizer.L(
+                "Throttled links detected: \(throttled.count) (inferred)",
+                "检测到被限速链路：\(throttled.count) 条（推断）"
+            ))
+        } else {
+            lines.append(localizer.L(
+                "Throttled links detected: \(throttled.count) (\(inferredThrottledCount) inferred)",
+                "检测到被限速链路：\(throttled.count) 条（含 \(inferredThrottledCount) 条推断）"
+            ))
+        }
         let rateWidth = max(10, throttled.map { displayColumnWidth($0.negotiatedSpeedLabel) }.max() ?? 10)
         for dev in throttled {
             let rate = padRightColumns(dev.negotiatedSpeedLabel, minColumns: rateWidth)
-            let seg = dev.bottleneckSegment?.localizedLabel(localizer) ?? dev.verdict.localizedLabel(localizer)
+            let seg = dev.localizedBottleneckSegmentLabel(localizer) ?? dev.localizedVerdictLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
             let portSuffix: String = {
                 if let p = dev.physicalPort, !p.isEmpty {

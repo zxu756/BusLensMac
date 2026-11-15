@@ -4,17 +4,20 @@ public struct DeviceDiagnosticEvaluation: Equatable, Sendable {
     public let verdict: LinkHealthVerdict
     public let bottleneckSegment: BottleneckSegment?
     public let deviceMaxGbps: Double?
+    public let isInferred: Bool
     public let detail: String
 
     public init(
         verdict: LinkHealthVerdict,
         bottleneckSegment: BottleneckSegment? = nil,
         deviceMaxGbps: Double? = nil,
+        isInferred: Bool = false,
         detail: String
     ) {
         self.verdict = verdict
         self.bottleneckSegment = bottleneckSegment
         self.deviceMaxGbps = deviceMaxGbps
+        self.isInferred = isInferred
         self.detail = detail
     }
 }
@@ -244,13 +247,15 @@ public enum BottleneckDiagnoser {
                         verdict: .throttled,
                         bottleneckSegment: seg,
                         deviceMaxGbps: (bcd == 0x0300) ? 5.0 : minSuperSpeed,
+                        isInferred: true,
                         detail: throttledEnglishDetail(
                             rateLabel: rateLabel,
                             maxGbps: minSuperSpeed,
                             isExactMax: bcd == 0x0300,
                             segment: seg,
                             portCeilingGbps: portCeilingGbps,
-                            upstreamHubGbps: upstreamHubGbps
+                            upstreamHubGbps: upstreamHubGbps,
+                            inferredFromBcdUSB: true
                         )
                     )
                 }
@@ -261,7 +266,8 @@ public enum BottleneckDiagnoser {
                     return DeviceDiagnosticEvaluation(
                         verdict: .normal,
                         deviceMaxGbps: 5.0,
-                        detail: "Negotiated at \(rateLabel) (matches USB 3.0 Gen 1 ceiling 5 Gb/s)."
+                        isInferred: true,
+                        detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x0300: matches USB 3.0 Gen 1 ceiling 5 Gb/s)."
                     )
                 }
                 if bcd >= 0x0310 && bcd < 0x0320 {
@@ -270,7 +276,8 @@ public enum BottleneckDiagnoser {
                         return DeviceDiagnosticEvaluation(
                             verdict: .normal,
                             deviceMaxGbps: 10.0,
-                            detail: "Negotiated at \(rateLabel) (matches USB 3.1 Gen 2 ceiling 10 Gb/s)."
+                            isInferred: true,
+                            detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x\(String(format: "%04x", bcd)): matches USB 3.1 Gen 2 ceiling 10 Gb/s)."
                         )
                     }
                     // At 5 Gb/s without SuperSpeedPlus sublink attribute, USB 3.1 Gen 1 vs Gen 2 is ambiguous.
@@ -285,7 +292,8 @@ public enum BottleneckDiagnoser {
                         return DeviceDiagnosticEvaluation(
                             verdict: .normal,
                             deviceMaxGbps: 20.0,
-                            detail: "Negotiated at \(rateLabel) (matches USB 3.2 Gen 2x2 ceiling 20 Gb/s)."
+                            isInferred: true,
+                            detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x\(String(format: "%04x", bcd)): matches USB 3.2 Gen 2x2 ceiling 20 Gb/s)."
                         )
                     }
                     return DeviceDiagnosticEvaluation(
@@ -297,7 +305,8 @@ public enum BottleneckDiagnoser {
                     return DeviceDiagnosticEvaluation(
                         verdict: .normal,
                         deviceMaxGbps: 40.0,
-                        detail: "Negotiated at \(rateLabel) (matches USB4 ceiling 40 Gb/s)."
+                        isInferred: true,
+                        detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x\(String(format: "%04x", bcd)): matches USB4 ceiling 40 Gb/s)."
                     )
                 }
             }
@@ -308,7 +317,8 @@ public enum BottleneckDiagnoser {
                     return DeviceDiagnosticEvaluation(
                         verdict: .normal,
                         deviceMaxGbps: 0.48,
-                        detail: "Negotiated at \(rateLabel) (matches USB 2.0 High-Speed ceiling 480 Mb/s)."
+                        isInferred: true,
+                        detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x\(String(format: "%04x", bcd)): matches USB 2.0 High-Speed ceiling 480 Mb/s)."
                     )
                 }
                 // Operating below 480 Mb/s (e.g. 12 Mb/s Full-Speed or 1.5 Mb/s Low-Speed):
@@ -339,7 +349,8 @@ public enum BottleneckDiagnoser {
                     return DeviceDiagnosticEvaluation(
                         verdict: .normal,
                         deviceMaxGbps: 0.012,
-                        detail: "Negotiated at \(rateLabel) (matches USB 1.1 Full-Speed ceiling 12 Mb/s)."
+                        isInferred: true,
+                        detail: "Negotiated at \(rateLabel) (inferred normal from bcdUSB 0x\(String(format: "%04x", bcd)): matches USB 1.1 Full-Speed ceiling 12 Mb/s)."
                     )
                 }
             }
@@ -403,21 +414,23 @@ public enum BottleneckDiagnoser {
         isExactMax: Bool,
         segment: BottleneckSegment,
         portCeilingGbps: Double?,
-        upstreamHubGbps: Double?
+        upstreamHubGbps: Double?,
+        inferredFromBcdUSB: Bool = false
     ) -> String {
         let capPrefix = isExactMax ? "" : ">= "
         let capStr = "\(capPrefix)\(formatSpeedGbps(maxGbps))"
+        let inferredPrefix = inferredFromBcdUSB ? "inferred from bcdUSB, " : ""
         switch segment {
         case .port:
             let portStr = portCeilingGbps.map(formatSpeedGbps) ?? rateLabel
-            return "Throttled (port-limited): device supports \(capStr), negotiated at \(rateLabel) due to \(portStr) host port ceiling."
+            return "Throttled (\(inferredPrefix)port-limited): device supports \(capStr), negotiated at \(rateLabel) due to \(portStr) host port ceiling."
         case .hub:
             let hubStr = upstreamHubGbps.map(formatSpeedGbps) ?? rateLabel
-            return "Throttled (hub-limited): device supports \(capStr), negotiated at \(rateLabel) behind \(hubStr) external USB hub."
+            return "Throttled (\(inferredPrefix)hub-limited): device supports \(capStr), negotiated at \(rateLabel) behind \(hubStr) external USB hub."
         case .cable:
-            return "Throttled (cable-limited): device supports \(capStr), negotiated at \(rateLabel); host port supports higher speed."
+            return "Throttled (\(inferredPrefix)cable-limited): device supports \(capStr), negotiated at \(rateLabel); host port supports higher speed."
         case .cableOrPortIndeterminate:
-            return "Throttled (cannot determine if cable or port): device supports \(capStr), negotiated at \(rateLabel); host port ceiling is unknown."
+            return "Throttled (\(inferredPrefix)cannot determine if cable or port): device supports \(capStr), negotiated at \(rateLabel); host port ceiling is unknown."
         }
     }
 
@@ -446,6 +459,12 @@ public enum BottleneckDiagnoser {
             if device.capability?.isAuxiliaryBillboardEndpoint == true {
                 return "实际速率 \(rate)（扩展坞 USB Billboard 辅助控制接口，正常）。"
             }
+            if device.isInferred {
+                if let devMax = device.deviceMaxGbps, devMax > 0 {
+                    return "实际速率 \(rate)（推断：按 bcdUSB 推断已达协议最高能力 \(formatSpeedGbps(devMax))，正常）。"
+                }
+                return "实际速率 \(rate)（推断：按 bcdUSB 推断，正常）。"
+            }
             if let devMax = device.deviceMaxGbps, devMax > 0 {
                 return "实际速率 \(rate)（已达设备最高能力 \(formatSpeedGbps(devMax))，正常）。"
             }
@@ -464,17 +483,18 @@ public enum BottleneckDiagnoser {
                 }
                 return "更高速率"
             }()
+            let inferredPrefix = device.isInferred ? "推断：按 bcdUSB 推断，" : ""
             switch device.bottleneckSegment ?? .cableOrPortIndeterminate {
             case .port:
                 let portStr = device.portCeilingGbps.map(formatSpeedGbps) ?? rate
-                return "被限速（端口限速）：设备支持 \(capStr)，当前仅 \(rate)（受限于主机端口上限 \(portStr)）。"
+                return "被限速（\(inferredPrefix)端口限速）：设备支持 \(capStr)，当前仅 \(rate)（受限于主机端口上限 \(portStr)）。"
             case .hub:
                 let hubStr = device.upstreamHubGbps.map(formatSpeedGbps) ?? rate
-                return "被限速（集线器限速）：设备支持 \(capStr)，当前经由 \(hubStr) 外接 USB 集线器协商为 \(rate)。"
+                return "被限速（\(inferredPrefix)集线器限速）：设备支持 \(capStr)，当前经由 \(hubStr) 外接 USB 集线器协商为 \(rate)。"
             case .cable:
-                return "被限速（线缆限速）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口支持更高速率，限速在连接线缆）。"
+                return "被限速（\(inferredPrefix)线缆限速）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口支持更高速率，限速在连接线缆）。"
             case .cableOrPortIndeterminate:
-                return "被限速（无法判断是线还是口）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口上限未知，无法判断是线还是口）。"
+                return "被限速（\(inferredPrefix)无法判断是线还是口）：设备支持 \(capStr)，当前仅协商为 \(rate)（主机端口上限未知，无法判断是线还是口）。"
             }
         case .indeterminate:
             return "实际速率 \(rate)，无法判断是否被限速。"

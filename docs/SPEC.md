@@ -12,11 +12,13 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
   - When `ioreg` descriptors are absent (e.g. offline `--input` without `--ioreg-input`), non-ceiling links report `Indeterminate` (`无法判断是否被限速`), and `--cli bottlenecks --input` without `--ioreg-input` exits `1`.
   - Per USB 2.0 §9.6.1, Full-Speed (`12 Mb/s`) devices legally report `bcdUSB = 0x0200`; unless USB class `3` proves HID, `bcdUSB = 0x0200` at `12 Mb/s` reports `Indeterminate`.
   - Per USB 3.2 §9.6.1, USB 3.2 Gen 1x1 (`5 Gb/s`) devices can report `bcdUSB = 0x0320`; because user-space `ioreg` does not expose SuperSpeedPlus sublink speed attributes, `bcdUSB = 0x0320` at `5 Gb/s` or `10 Gb/s` reports `Indeterminate`.
-- **No fabricated ceilings or power defaults**: Missing controller ceilings and missing `SPPowerDataType` / `pmset` fields remain `nil` (`null` in JSON) and render as `Unknown` (`未知`).
-- **Unverified hardware matrices**:
+- **No fabricated ceilings, synthesized port labels, or power defaults**: Missing controller ceilings, missing `UsbIOPort` physical port labels, and missing `SPPowerDataType` / `pmset` fields remain `nil` (`null` in JSON) and render as `Unknown` (`未知`). When host port ceiling is unknown, bottleneck attribution reports `Cannot determine if cable or port` (`无法判断是线还是口`) instead of defaulting to cable.
+- **Explicit `inferred` (`推断`) marker on `bcdUSB`-derived conclusions**: Any link verdict or throttling conclusion derived from `bcdUSB` carries an explicit `(inferred)` / `（推断）` marker across CLI text, `--json` (`isInferred: true`), menu bar, and dashboard outputs.
+- **Real-hardware verification scope & unverified matrices**:
+  - **Verified on real hardware**: Only external device enumeration count (`3` attached devices) and negotiated link speeds (`40 Gb/s`, `480 Mb/s`, `12 Mb/s`; `0` throttled devices) on `1` machine (Apple Silicon Mac mini, macOS 27.0.1 arm64).
+  - **Link throttling & bottleneck segment judgment (`Throttled` / `bcdUSB` inference, charging-only cables & external USB 2.0 hub throttling)**: *Unverified on real hardware (synthetic fixtures only) / 未在真机验证（尚未在真机上验证（仅合成样本测试））*.
   - **macOS 14–15 legacy `SPUSBDataType` schema**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
   - **Thunderbolt 5 (`80 Gb/s` / `120 Gb/s`)**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
-  - **Real-hardware charging-only cable & external USB 2.0 hub throttling captures**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
 
 ---
 
@@ -36,16 +38,16 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
    - Reads per-device `receptacle_upstream_ambiguous_tag.current_speed_key` across direct and daisy-chained switches.
    - Maps host `Router ID` -> `IOThunderboltPort` `Socket ID` -> physical port (`Port-USB-C@N`) and decodes `Supported Link Speed` × `Supported Link Width` for host ceiling and attached switch max capability.
 2. **`SPUSBHostDataType` / `SPUSBDataType` + `AppleUSBHostPort`**:
-   - Resolves `locationID` to ancestor host `AppleUSBHostPort` (`UsbIOPort`, e.g. `Port-USB-C@6`), propagating `"UsbProtocolCompanion (3.x)"` SuperSpeed ceilings onto USB 2.0 companion ports sharing the same physical connector.
+   - Resolves `locationID` to ancestor host `AppleUSBHostPort` (`UsbIOPort`, e.g. `Port-USB-C@6`); missing `UsbIOPort` or missing explicit port ceiling remains `nil` (`Unknown` / `未知`).
    - Filters only Apple built-in hubs (`Built-in` / `USBPortType` `1` or `2`) and explicit USB Hub Class (`bDeviceClass == 9`) containers (`U13`); composite (`0`) and Billboard (`17`) docks with downstream devices remain visible.
 3. **`SPPowerDataType` + `pmset -g`**:
    - Extracts optional AC / Battery state, USB-C PD wattage, and Low Power Mode (`Unknown` / `未知` when absent).
 
 ### 3.2 Descriptor-Backed Verdicts (`BottleneckDiagnoser.swift`)
 1. **`fullRate`** (`Full bus rate` / `满速`) — Negotiated speed meets explicit port ceiling or `>= 40 Gb/s` without falling below proven device max capability.
-2. **`normal`** (`Normal` / `正常`) — Negotiated speed matches proven hardware capability (`0x0200` at `480 Mb/s`, `0x0300` at `5 Gb/s`, `0x0310` at `10 Gb/s`, or healthy `bDeviceClass == 17` Billboard).
+2. **`normal`** (`Normal` / `正常`, or `Normal (inferred)` / `正常（推断）` when derived from `bcdUSB`) — Negotiated speed matches explicit hardware capability (healthy `bDeviceClass == 17` Billboard) or `bcdUSB`-inferred ceiling (`0x0200` at `480 Mb/s`, `0x0300` at `5 Gb/s`, `0x0310` at `10 Gb/s`).
 3. **`lowSpeedPeripheral`** (`HID peripheral` / `HID / 低速外设`) — Verified USB HID (`class == 3`) at `1.5 Mb/s` or `12 Mb/s` (`U14`).
-4. **`throttled`** (`Throttled` / `被限速`) — Proven device capability exceeds negotiated rate (e.g. BOS `bcdUSB == 0x0210` below `5 Gb/s`, `bcdUSB >= 0x0300` below `5 Gb/s`, or Thunderbolt switch capability > negotiated bandwidth), classified into `port` (`端口限速`), `hub` (`集线器限速`), or `cable` (`线缆限速`).
+4. **`throttled`** (`Throttled` / `被限速`, or `Throttled (inferred)` / `被限速（推断）` when derived from `bcdUSB`) — Device capability exceeds negotiated rate (explicit Thunderbolt switch capability > negotiated bandwidth, or `bcdUSB == 0x0210` / `>= 0x0300` inferred SuperSpeed device below `5 Gb/s`), classified into `port` (`端口限速`), `hub` (`集线器限速`), `cable` (`线缆限速`), or `cable_or_port_indeterminate` (`无法判断是线还是口`) when host port ceiling is unknown.
 5. **`indeterminate`** (`Indeterminate` / `无法判断是否被限速`) — Capability descriptors absent or USB specification ambiguous.
 
 ---

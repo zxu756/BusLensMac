@@ -14,13 +14,13 @@
 
 > **版本说明：** 已发布的 `v0.2.0`（`main`）早于下方 M0 诚实化修订与 M1 `ioreg` 硬件能力诊断。AppKit 启动前 CLI 退出处理、`--json`、`--input`、`--ioreg-input`、`--cli bottlenecks`、`--demo`、`--help`、`--version`、`./Scripts/test.sh`、物理端口映射及基于描述符的速率结论均为 **未发布（v0.2.0 之后）**。
 
-- **逐设备协商速率解析与物理端口映射** — 优先读取每个雷雳 / USB4 外设自身的 `receptacle_upstream_ambiguous_tag` 上行协商速率（含菊花链下级设备）及 USB 外设的 `USBDeviceKeyLinkSpeed` / `UsbLinkSpeed`；结合 `ioreg` `AppleUSBHostPort`（`UsbIOPort`）与 `IOThunderboltPort` 将 `locationID` 和雷雳 `Router ID` / `Socket ID` 映射至机身物理端口（如 `Port-USB-C@2`、`Port-USB-C@6`），并把同一物理接口上的 USB 3.x 伴生上限传递至 USB 2.0 通道。
-- **基于硬件描述符的速率结论（不看设备名猜测）** — 完全不检查产品名或厂商字符串，仅将当前协商速率与 `ioreg` 暴露的硬件描述符（`bcdUSB`、`bDeviceClass`、`bInterfaceClass` 及 `IOThunderboltPort` `Supported Link Speed` × `Supported Link Width`）交叉比对：
+- **逐设备协商速率解析与物理端口映射** — 优先读取每个雷雳 / USB4 外设自身的 `receptacle_upstream_ambiguous_tag` 上行协商速率（含菊花链下级设备）及 USB 外设的 `USBDeviceKeyLinkSpeed` / `UsbLinkSpeed`；结合 `ioreg` `AppleUSBHostPort`（`UsbIOPort`）与 `IOThunderboltPort` 将 `locationID` 和雷雳 `Router ID` / `Socket ID` 映射至机身物理端口（如 `Port-USB-C@2`、`Port-USB-C@6`），读不到 `UsbIOPort` 或读不到端口上限时一律显示 `未知`，不拼接标签、不给默认值。
+- **基于硬件描述符的速率结论（不看设备名猜测，推断结论显式标 `推断`）** — 完全不检查产品名或厂商字符串，仅将当前协商速率与 `ioreg` 暴露的硬件描述符（`bcdUSB`、`bDeviceClass`、`bInterfaceClass` 及 `IOThunderboltPort` `Supported Link Speed` × `Supported Link Width`）比对；凡靠 `bcdUSB` 推断得出的结论在命令行、JSON 与图形界面输出中均带 **`推断`** 标记：
   1. **`满速` (`Full bus rate`)** — 当前协商速率达到该总线显式报告的控制器上限，或运行在 `>= 40 Gb/s` 雷雳 / USB4 速率且未低于设备自身上限。
-  2. **`正常` (`Normal`)** — 当前协商速率与设备硬件最高支持速率一致（例如 `bcdUSB = 0x0200` 跑在 `480 Mb/s`、`0x0300` 跑在 `5 Gb/s`、`0x0310` 跑在 `10 Gb/s`，或扩展坞 `bDeviceClass = 17` USB Billboard 辅助控制端点）。
+  2. **`正常` / `正常（推断）` (`Normal` / `Normal (inferred)`)** — 当前协商速率与显式硬件能力一致（如扩展坞 `bDeviceClass = 17` USB Billboard 辅助控制端点），或按 `bcdUSB` 推断已达对应协议上限（`bcdUSB = 0x0200` 跑在 `480 Mb/s`、`0x0300` 跑在 `5 Gb/s`、`0x0310` 跑在 `10 Gb/s`）。
   3. **`HID / 低速外设` (`HID peripheral`)** — 仅在 USB 设备类或接口类明确为 HID（`class == 3`）且运行在 `1.5 Mb/s` 或 `12 Mb/s` 时标注（`U14`：大容量存储 `class == 8` 设备即使跑在 `12 Mb/s` 也绝不误标为低速外设）。
-  4. **`被限速` (`Throttled`)** — 硬件描述符证明设备支持比当前协商速率更高的档位（例如支持 SuperSpeed 的设备在 USB 2.0/1.1 下报告 BOS `bcdUSB = 0x0210` 却跑在 `480 Mb/s` 或 `12 Mb/s`，或支持 `40 Gb/s` 的雷雳交换芯片协商在 `20 Gb/s`），并按链路拓扑指出限速段：**`端口限速`**（机身端口上限低于设备能力）、**`集线器限速`**（外接 USB Class-9 集线器速率低于设备能力）或 **`线缆限速`**（端口与集线器均支持更高档位）。
-  5. **`无法判断是否被限速` (`Indeterminate`)** — 当缺少 `ioreg` 描述符（如离线 `--input` 未提供 `--ioreg-input`）或协议字段本身存在歧义（如 `bcdUSB = 0x0200` 在 `12 Mb/s` 下无 `DeviceQualifier` 且非 HID 类 `3`，或 xHCI 下 `bcdUSB = 0x0320` 缺少 SuperSpeedPlus 子链路属性）时诚实输出无法判断。
+  4. **`被限速` / `被限速（推断）` (`Throttled` / `Throttled (inferred)`)** — 硬件描述符表明设备支持更高档位（例如显式支持 `40 Gb/s` 的雷雳交换芯片协商在 `20 Gb/s`，或按 `bcdUSB = 0x0210` / `>= 0x0300` 推断支持 SuperSpeed 的设备跑在 `480 Mb/s` 或 `12 Mb/s`），并按已知上限归因：**`端口限速`**（机身端口显式上限低于设备能力）、**`集线器限速`**（外接 USB Class-9 集线器速率低于设备能力）、**`线缆限速`**（机身端口与集线器显式上限均高于协商速率），端口上限未知时诚实输出 **`无法判断是线还是口`**。
+  5. **`无法判断是否被限速` (`Indeterminate`)** — 当缺少 `ioreg` 描述符（如离线 `--input` 未提供 `--ioreg-input`）或协议字段本身存在歧义（如 `bcdUSB = 0x0200` 在 `12 Mb/s` 下非 HID 类 `3`，或 `bcdUSB = 0x0320` 在 `5 Gb/s` / `10 Gb/s` 下缺少 SuperSpeedPlus 子链路属性）时诚实输出无法判断。
 - **严格按 USB Class 9 过滤集线器容器（`U13`）与未知项诚实展示** — 仅隐藏 Apple 主板内置根/伴生集线器（`Built-in` / `USBPortType` 内部端口）及显式 USB 集线器类（`bDeviceClass == 9`）容器；复合功能扩展坞（`bDeviceClass == 0`）、Billboard 扩展坞（`bDeviceClass == 17`）及名称包含 `"hub"` 的终端硬盘均完整保留。未报告的总线上限与缺失的供电字段一律显示 `未知`（JSON 为 `null`）。
 - **无界面 CLI（`topology` 与 `bottlenecks`）及 `--json` 输出** — 在 AppKit 启动前处理并退出：成功返回 `0`，运行或输入错误（含离线 `--cli bottlenecks --input` 未配对 `--ioreg-input`）返回 `1`，未知子命令或非法参数返回 `2`。
 - **应用内 `中文 / EN` 实时切换与标识符脱敏** — 支持 `中文 | EN` 胶囊按钮、快捷键 `⇧⌘L` 与命令行 `--lang zh|en`；自动脱敏 `system_profiler` 与 `ioreg` 中的序列号、UUID、UID 与 ContainerID。
@@ -36,8 +36,8 @@
 
 | 能力 / 数据结构 | 验证状态 | 验证依据 |
 |---|---|---|
-| `SPThunderboltDataType` + `SPUSBHostDataType` + `SPPowerDataType` + `ioreg`（`AppleUSBHostPort` / `IOThunderboltSwitch`）（macOS 27.0.1 arm64） | **已在真机验证** | 脱敏真机快照（`host_macmini_scrubbed.json` 及配对的 `host_macmini_20261115_sp_scrubbed.json` + `host_macmini_20261115_ioreg_scrubbed.plist`）、逐设备对照脚本（`m1-differential.sh`）及连续 50 次 `--cli topology --json` 实测（单次 `< 0.9` 秒，退出码 `0`，0 标识符泄漏）。 |
-| 真机充电线降速与外接 USB 2.0 集线器限速实采样本 | **尚未在真机上验证（仅合成样本测试）** | 需人工拔插更换充电线与外接集线器；已在 `DiagnoserTests` 与 `m1-differential.sh` 中通过 16+ 种合成 `system_profiler` + `ioreg` 场景覆盖。 |
+| 1 台机器（Apple Silicon Mac mini，macOS 27.0.1 arm64）、3 台外接设备（`40 Gb/s`、`480 Mb/s`、`12 Mb/s`）的外设枚举数量与协商速率读取（`SPThunderboltDataType` + `SPUSBHostDataType` + `ioreg`） | **已在真机验证** | **仅核对了设备数（3 台）与协商速率**（`40 Gb/s`、`480 Mb/s`、`12 Mb/s`，本机 0 台被限速设备），对照脱敏真机快照（`host_macmini_scrubbed.json` 及配对的 `host_macmini_20261115_sp_scrubbed.json` + `host_macmini_20261115_ioreg_scrubbed.plist`）、同源 `ioreg` 对照脚本（`m1-differential.sh`）及连续 50 次 `--cli topology --json` 实测（单次 `< 0.9` 秒，退出码 `0`，0 标识符泄漏）。 |
+| 限速判断与瓶颈段归因（`被限速` / `bcdUSB` 推断结论、充电线降速与外接 USB 2.0 集线器限速） | **未在真机验证（尚未在真机上验证（仅合成样本测试））** | 本机 3 台设备无一台被限速，且未做人工换线/换集线器实采；限速判断与靠 `bcdUSB` 推断出的结论（输出带 `推断` 标记）仅在 `DiagnoserTests` 与 `m1-differential.sh` 的合成样本上测试。 |
 | 旧版 `SPUSBDataType` 结构（macOS 14–15） | **尚未在真机上验证（仅合成样本测试）** | 仅通过 `CollectorTests`（`Tests/BusLensMacCoreTests/CollectorTests.swift`）中的合成 JSON 样本测试。 |
 | 雷雳 5 / Thunderbolt 5（`80 Gb/s` / `120 Gb/s`） | **尚未在真机上验证（仅合成样本测试）** | 仅通过合成速率与链路位掩码测试，尚未在雷雳 5 真机硬件上实测。 |
 

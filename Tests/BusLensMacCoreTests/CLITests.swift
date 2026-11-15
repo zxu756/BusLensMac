@@ -425,4 +425,223 @@ struct CLITests {
         #expect(ver.exitCode == 0)
         #expect(ver.stdout.contains("0.2.0"))
     }
+
+    @Test("UR5: README verification row states 1 machine, 3 devices, enumeration & negotiated speed only (throttling unverified), and bcdUSB-inferred conclusions carry 'inferred' / '推断' across CLI, JSON, and GUI")
+    @MainActor
+    func testUR5BcdUSBInferredConclusionsAndReadmeVerificationScope() throws {
+        // 1. Verify README.md and README.zh-CN.md verification rows
+        let readmeEn = try String(contentsOf: Self.repoRootURL.appendingPathComponent("README.md"), encoding: .utf8)
+        let readmeZh = try String(contentsOf: Self.repoRootURL.appendingPathComponent("README.zh-CN.md"), encoding: .utf8)
+
+        let verifiedRowEn = try #require(
+            readmeEn.components(separatedBy: .newlines).first { $0.contains("**Verified on real hardware**") }
+        )
+        #expect(verifiedRowEn.contains("1 machine"))
+        #expect(verifiedRowEn.contains("3 attached devices"))
+        #expect(verifiedRowEn.lowercased().contains("only"))
+        #expect(verifiedRowEn.lowercased().contains("negotiated"))
+
+        let throttlingRowEn = readmeEn.components(separatedBy: .newlines).first {
+            $0.lowercased().contains("throttl") && $0.contains("Unverified on real hardware")
+        }
+        #expect(throttlingRowEn != nil)
+
+        let verifiedRowZh = try #require(
+            readmeZh.components(separatedBy: .newlines).first { $0.contains("**已在真机验证**") }
+        )
+        #expect(verifiedRowZh.contains("1 台"))
+        #expect(verifiedRowZh.contains("3 台"))
+        #expect(verifiedRowZh.contains("仅核对"))
+        #expect(verifiedRowZh.contains("协商速率"))
+
+        let throttlingRowZh = readmeZh.components(separatedBy: .newlines).first {
+            $0.contains("限速判断") && $0.contains("未在真机验证")
+        }
+        #expect(throttlingRowZh != nil)
+
+        // 2. Verify bcdUSB-inferred conclusions carry 'inferred' / '推断' in CLI text, CLI JSON, and GUI model details
+        let tmpDir = FileManager.default.temporaryDirectory.appendingPathComponent("buslens-ur5-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let spURL = tmpDir.appendingPathComponent("synthetic_ur5_sp.json")
+        let ioregURL = tmpDir.appendingPathComponent("synthetic_ur5_ioreg.plist")
+
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "ExplicitTBThrottled",
+                  "device_name_key": "ExplicitTBThrottled",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                { "_name": "BcdUSBThrottledDrive", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "BcdUSBNormal10GDrive", "USBKeyLocationID": "0x01210000", "USBDeviceKeyLinkSpeed": "10 Gb/s", "USBDeviceKeyVendorName": "Acme" },
+                { "_name": "VerifiedHIDMouse", "USBKeyLocationID": "0x01120000", "USBDeviceKeyLinkSpeed": "12 Mb/s", "USBDeviceKeyVendorName": "Acme" }
+              ]
+            }
+          ]
+        }
+        """
+        try Data(syntheticSP.utf8).write(to: spURL)
+
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (2.0)": true,
+                    "UsbProtocolCompanion (3.x)": "IOService:/usb-ss@01200000",
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01110000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01120000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]]]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01200000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01210000, "bcdUSB": 0x0310, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType3",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "ExplicitTBThrottled"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let ioregData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        try ioregData.write(to: ioregURL)
+
+        let jsonZhRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "topology", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--json", "--lang", "zh"
+        ])
+        #expect(jsonZhRes.exitCode == 0)
+        let rootZh = try #require(JSONSerialization.jsonObject(with: Data(jsonZhRes.stdout.utf8)) as? [String: Any])
+        let devsZh = try #require(rootZh["devices"] as? [[String: Any]])
+        let byNameZh = Dictionary(uniqueKeysWithValues: devsZh.compactMap { d -> (String, [String: Any])? in
+            guard let n = d["name"] as? String else { return nil }
+            return (n, d)
+        })
+
+        #expect((byNameZh["BcdUSBThrottledDrive"]?["isInferred"] as? Bool) == true)
+        #expect((byNameZh["BcdUSBThrottledDrive"]?["verdictLabel"] as? String) == "被限速（推断）")
+        #expect((byNameZh["BcdUSBThrottledDrive"]?["diagnosticDetail"] as? String)?.contains("推断") == true)
+
+        #expect((byNameZh["BcdUSBNormal10GDrive"]?["isInferred"] as? Bool) == true)
+        #expect((byNameZh["BcdUSBNormal10GDrive"]?["verdictLabel"] as? String) == "正常（推断）")
+        #expect((byNameZh["BcdUSBNormal10GDrive"]?["diagnosticDetail"] as? String)?.contains("推断") == true)
+
+        #expect((byNameZh["ExplicitTBThrottled"]?["isInferred"] as? Bool) == false)
+        #expect((byNameZh["ExplicitTBThrottled"]?["verdictLabel"] as? String) == "被限速")
+        #expect((byNameZh["VerifiedHIDMouse"]?["isInferred"] as? Bool) == false)
+        #expect((byNameZh["VerifiedHIDMouse"]?["verdictLabel"] as? String) == "HID / 低速外设")
+
+        let jsonEnRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "topology", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--json", "--lang", "en"
+        ])
+        #expect(jsonEnRes.exitCode == 0)
+        let rootEn = try #require(JSONSerialization.jsonObject(with: Data(jsonEnRes.stdout.utf8)) as? [String: Any])
+        let devsEn = try #require(rootEn["devices"] as? [[String: Any]])
+        let byNameEn = Dictionary(uniqueKeysWithValues: devsEn.compactMap { d -> (String, [String: Any])? in
+            guard let n = d["name"] as? String else { return nil }
+            return (n, d)
+        })
+        #expect((byNameEn["BcdUSBThrottledDrive"]?["isInferred"] as? Bool) == true)
+        #expect((byNameEn["BcdUSBThrottledDrive"]?["verdictLabel"] as? String) == "Throttled (inferred)")
+        #expect((byNameEn["BcdUSBNormal10GDrive"]?["isInferred"] as? Bool) == true)
+        #expect((byNameEn["BcdUSBNormal10GDrive"]?["verdictLabel"] as? String) == "Normal (inferred)")
+        #expect((byNameEn["ExplicitTBThrottled"]?["isInferred"] as? Bool) == false)
+        #expect((byNameEn["VerifiedHIDMouse"]?["isInferred"] as? Bool) == false)
+
+        let textZhRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "topology", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--lang", "zh"
+        ])
+        #expect(textZhRes.stdout.contains("被限速（推断）"))
+        #expect(textZhRes.stdout.contains("正常（推断）"))
+
+        let textEnRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "topology", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--lang", "en"
+        ])
+        #expect(textEnRes.stdout.contains("Throttled (inferred)"))
+        #expect(textEnRes.stdout.contains("Normal (inferred)"))
+
+        let botZhRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "bottlenecks", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--lang", "zh"
+        ])
+        #expect(botZhRes.stdout.contains("无法判断是线还是口（推断）"))
+        #expect(botZhRes.stdout.contains("推断"))
+
+        let botEnRes = BusCLIRunner.execute(arguments: [
+            "BusLensMac", "--cli", "bottlenecks", "--input", spURL.path, "--ioreg-input", ioregURL.path, "--lang", "en"
+        ])
+        #expect(botEnRes.stdout.contains("Cannot determine if cable or port (inferred)"))
+
+        // Also verify GUI model methods used by BusDashboardView & BusMenuBarView device rows
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(ioregData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let enLoc = AppLocalizer(fixedLanguage: .en)
+        let zhLoc = AppLocalizer(fixedLanguage: .zhHans)
+        let guiByName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+        #expect(guiByName["BcdUSBThrottledDrive"]?.localizedVerdictLabel(enLoc) == "Throttled (inferred)")
+        #expect(guiByName["BcdUSBThrottledDrive"]?.localizedVerdictLabel(zhLoc) == "被限速（推断）")
+        #expect(guiByName["BcdUSBNormal10GDrive"]?.localizedVerdictLabel(enLoc) == "Normal (inferred)")
+        #expect(guiByName["BcdUSBNormal10GDrive"]?.localizedVerdictLabel(zhLoc) == "正常（推断）")
+        #expect(guiByName["ExplicitTBThrottled"]?.localizedVerdictLabel(zhLoc) == "被限速")
+        #expect(guiByName["VerifiedHIDMouse"]?.localizedVerdictLabel(zhLoc) == "HID / 低速外设")
+    }
 }

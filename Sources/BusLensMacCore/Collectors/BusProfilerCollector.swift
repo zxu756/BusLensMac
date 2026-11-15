@@ -410,6 +410,7 @@ public enum BusProfilerCollector {
                     modeDescription: mode.replacingOccurrences(of: "_", with: " "),
                     capability: capability,
                     bottleneckSegment: eval.bottleneckSegment,
+                    isInferred: eval.isInferred,
                     verdict: eval.verdict,
                     diagnosticDetail: eval.detail
                 )
@@ -590,6 +591,7 @@ public enum BusProfilerCollector {
                         modeDescription: behindExternalHub ? "via external USB hub" : "direct host bus",
                         capability: mergedCap,
                         bottleneckSegment: eval.bottleneckSegment,
+                        isInferred: eval.isInferred,
                         verdict: eval.verdict,
                         diagnosticDetail: eval.detail
                     )

@@ -143,6 +143,8 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     public var modeDescription: String
     public var capability: DeviceCapabilityDescriptor?
     public var bottleneckSegment: BottleneckSegment?
+    public var isInferred: Bool
+    public var isPhysicalPortInferred: Bool
     public var verdict: LinkHealthVerdict
     public var diagnosticDetail: String
 
@@ -164,6 +166,8 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         modeDescription: String = "",
         capability: DeviceCapabilityDescriptor? = nil,
         bottleneckSegment: BottleneckSegment? = nil,
+        isInferred: Bool? = nil,
+        isPhysicalPortInferred: Bool = false,
         verdict: LinkHealthVerdict,
         diagnosticDetail: String
     ) {
@@ -196,6 +200,13 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         self.modeDescription = modeDescription
         self.capability = capability
         self.bottleneckSegment = bottleneckSegment
+        self.isInferred = isInferred ?? (
+            protocolKind == .usbHost
+                && capability?.bcdUSB != nil
+                && capability?.isAuxiliaryBillboardEndpoint != true
+                && (verdict == .throttled || verdict == .normal)
+        )
+        self.isPhysicalPortInferred = isPhysicalPortInferred
         self.verdict = verdict
         self.diagnosticDetail = diagnosticDetail
     }
@@ -224,6 +235,21 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
             return physicalPort
         }
         return localizer.L("Unknown", "未知")
+    }
+
+    @MainActor
+    public func localizedVerdictLabel(_ localizer: AppLocalizer) -> String {
+        let base = verdict.localizedLabel(localizer)
+        guard isInferred else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
+    }
+
+    @MainActor
+    public func localizedBottleneckSegmentLabel(_ localizer: AppLocalizer) -> String? {
+        guard let bottleneckSegment else { return nil }
+        let base = bottleneckSegment.localizedLabel(localizer)
+        guard isInferred else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
     }
 
     @MainActor

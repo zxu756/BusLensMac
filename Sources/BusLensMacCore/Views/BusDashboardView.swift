@@ -492,7 +492,7 @@ public struct BusDashboardView: View {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(dev.verdict.color)
                     .frame(width: 3.5, height: 14)
-                Text(dev.verdict.localizedLabel(localizer))
+                Text(dev.localizedVerdictLabel(localizer))
                     .font(.system(size: 11.5, weight: isWarn ? .bold : .medium))
                     .foregroundStyle(dev.verdict.color)
                     .lineLimit(1)
