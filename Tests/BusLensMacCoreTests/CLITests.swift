@@ -644,4 +644,135 @@ struct CLITests {
         #expect(guiByName["ExplicitTBThrottled"]?.localizedVerdictLabel(zhLoc) == "被限速")
         #expect(guiByName["VerifiedHIDMouse"]?.localizedVerdictLabel(zhLoc) == "HID / 低速外设")
     }
+
+    @Test("UR6: Menu bar throttled count and dashboard physical ports carry 'inferred' / '推断' when displaying inferred conclusions, and m1-differential.sh Row 1 states what it checked and same-source ioreg keys")
+    @MainActor
+    func testUR6MenuBarCountDashboardPhysicalPortsAndRow1SameSourceDisclosure() throws {
+        // 1. m1-differential.sh Row 1 output must disclose what it actually checked & same-source ioreg keys
+        let diffScript = try String(
+            contentsOf: Self.repoRootURL.appendingPathComponent("Scripts/acceptance/m1-differential.sh"),
+            encoding: .utf8
+        )
+        let row1Idx = try #require(diffScript.range(of: "[PASS] Row 1"))
+        let row1Tail = String(diffScript[row1Idx.lowerBound...].prefix(900))
+        #expect(row1Tail.contains("只核对") || row1Tail.lowercased().contains("checked only"))
+        #expect(row1Tail.contains("同一批 ioreg 键") || row1Tail.lowercased().contains("same ioreg keys"))
+        #expect(row1Tail.contains("未验证限速") || row1Tail.lowercased().contains("0 throttled") || row1Tail.lowercased().contains("no throttling"))
+
+        // 2. Dashboard physical port line on paired 2026-11-15 fixture:
+        //    - TBU405Pro physical port comes from cross-bus Socket ID -> PortNumber inference -> carries '推断' / 'inferred'
+        //    - AJAZZ AJ159 APEX physical port comes directly from AppleUSBHostPort UsbIOPort and HID class 3 -> NOT inferred
+        let enLoc = AppLocalizer(fixedLanguage: .en)
+        let zhLoc = AppLocalizer(fixedLanguage: .zhHans)
+        let spRaw = try Data(contentsOf: Self.host20261115SPURL)
+        let ioRaw = try Data(contentsOf: Self.host20261115IORegURL)
+        let ioSnap = try IORegistrySnapshot.parsePlistData(ioRaw)
+        let hostSnap = try BusProfilerCollector.parseSystemProfilerJSONValidated(spRaw, ioregSnapshot: ioSnap)
+
+        let tbDev = try #require(hostSnap.devices.first { $0.name == "TBU405Pro" })
+        #expect(BusDashboardView.topologyPortLine(for: tbDev, localizer: zhLoc).contains("Port-USB-C@2（推断）"))
+        #expect(BusDashboardView.topologyPortLine(for: tbDev, localizer: enLoc).contains("Port-USB-C@2 (inferred)"))
+
+        let ajazzDev = try #require(hostSnap.devices.first { $0.name == "AJAZZ AJ159 APEX" })
+        #expect(BusDashboardView.topologyPortLine(for: ajazzDev, localizer: zhLoc).contains("Port-USB-C@6"))
+        #expect(!BusDashboardView.topologyPortLine(for: ajazzDev, localizer: zhLoc).contains("推断"))
+
+        // 3. Dashboard physical port line on bcdUSB-inferred USB device carries '推断' / 'inferred'
+        let bcdEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        let inferredUSBDev = AttachedBusDevice(
+            id: "ur6-usb-inferred",
+            name: "InferredDrive",
+            vendor: "Acme",
+            busName: "USB 3.1 Bus",
+            physicalPort: "Port-USB-C@1",
+            protocolKind: .usbHost,
+            negotiatedSpeedLabel: "480 Mb/s",
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            deviceMaxGbps: bcdEval.deviceMaxGbps,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8]),
+            bottleneckSegment: bcdEval.bottleneckSegment,
+            isInferred: bcdEval.isInferred,
+            verdict: bcdEval.verdict,
+            diagnosticDetail: bcdEval.detail
+        )
+        #expect(BusDashboardView.topologyPortLine(for: inferredUSBDev, localizer: zhLoc).contains("Port-USB-C@1（推断）"))
+        #expect(BusDashboardView.topologyPortLine(for: inferredUSBDev, localizer: enLoc).contains("Port-USB-C@1 (inferred)"))
+
+        // 4. Menu bar throttled badge and dashboard physical port module mark inferred conclusions
+        let explicitTBThrottled = AttachedBusDevice(
+            id: "ur6-tb-explicit",
+            name: "ExplicitTBDrive",
+            vendor: "Acme",
+            busName: "Thunderbolt / USB4 Bus 0",
+            physicalPort: "Port-USB-C@2",
+            protocolKind: .thunderboltUSB4,
+            negotiatedSpeedLabel: "20 Gb/s",
+            negotiatedGbps: 20.0,
+            portCeilingGbps: 40.0,
+            deviceMaxGbps: 40.0,
+            capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0),
+            bottleneckSegment: .cable,
+            isInferred: false,
+            isPhysicalPortInferred: true,
+            verdict: .throttled,
+            diagnosticDetail: "Throttled (cable-limited)"
+        )
+
+        let snapPureInferred = BusTopologySnapshot(
+            capturedAt: Date(),
+            controllers: [
+                PhysicalPortController(
+                    id: "usb-c0",
+                    title: "USB 3.1 Bus",
+                    protocolKind: .usbHost,
+                    maxGbps: nil,
+                    negotiatedGbps: 0.48,
+                    isConnected: true,
+                    devices: [inferredUSBDev]
+                )
+            ],
+            devices: [inferredUSBDev],
+            power: PowerDeliverySummary()
+        )
+        #expect(BusMenuBarView.statusBadgeText(for: snapPureInferred, localizer: zhLoc) == "1 台被限速（推断）")
+        #expect(BusMenuBarView.statusBadgeText(for: snapPureInferred, localizer: enLoc) == "1 throttled (inferred)")
+        #expect(BusDashboardView.physicalPortModuleSubtitle(for: snapPureInferred.controllers[0], localizer: zhLoc).contains("限速（推断）"))
+        #expect(BusDashboardView.physicalPortModuleSubtitle(for: snapPureInferred.controllers[0], localizer: enLoc).contains("throttled (inferred)"))
+
+        let snapMixed = BusTopologySnapshot(
+            capturedAt: Date(),
+            controllers: [],
+            devices: [inferredUSBDev, explicitTBThrottled],
+            power: PowerDeliverySummary()
+        )
+        #expect(BusMenuBarView.statusBadgeText(for: snapMixed, localizer: zhLoc) == "2 台被限速（含 1 台推断）")
+        #expect(BusMenuBarView.statusBadgeText(for: snapMixed, localizer: enLoc) == "2 throttled (1 inferred)")
+
+        let snapExplicitOnly = BusTopologySnapshot(
+            capturedAt: Date(),
+            controllers: [
+                PhysicalPortController(
+                    id: "tb-b0",
+                    title: "Thunderbolt / USB4 Bus 0",
+                    protocolKind: .thunderboltUSB4,
+                    maxGbps: 40.0,
+                    negotiatedGbps: 20.0,
+                    isConnected: true,
+                    devices: [explicitTBThrottled]
+                )
+            ],
+            devices: [explicitTBThrottled],
+            power: PowerDeliverySummary()
+        )
+        #expect(BusMenuBarView.statusBadgeText(for: snapExplicitOnly, localizer: zhLoc) == "1 台被限速")
+        #expect(!BusDashboardView.physicalPortModuleSubtitle(for: snapExplicitOnly.controllers[0], localizer: zhLoc).contains("推断"))
+        #expect(!BusMenuBarView.statusBadgeText(for: hostSnap, localizer: zhLoc).contains("推断"))
+    }
 }

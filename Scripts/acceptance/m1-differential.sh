@@ -332,8 +332,13 @@ anon_summary = ", ".join(
 ) or "0 attached devices"
 passed_checks += 1
 print(
-    f"[PASS] Row 1 (Live differential oracle vs system_profiler + ioreg in EN & ZH): "
-    f"devices={len(oracle_devices)} ({anon_summary}), 100% match on count/speed/port, "
+    f"[PASS] Row 1 (Live same-source check vs system_profiler + ioreg in EN & ZH): "
+    f"devices={len(oracle_devices)} ({anon_summary}) — "
+    f"checked only external device count, negotiated speeds, and port labels (0 throttled devices; no throttling verified; "
+    f"只核对了外接设备数、协商速率与端口标签，未验证限速判断); "
+    f"reference script and product read the same ioreg keys "
+    f"(AppleUSBHostPort UsbIOPort/PortNumber/bDeviceClass/USBPortType/UsbLinkSpeed & IOThunderboltSwitch Router ID/Socket ID; "
+    f"参照与产品读的是同一批 ioreg 键，对端口映射与集线器过滤属同源对照), "
     f"0 leaks across {len(live_secrets)} live identifiers"
 )
 

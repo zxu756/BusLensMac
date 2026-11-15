@@ -411,6 +411,7 @@ public enum BusProfilerCollector {
                     capability: capability,
                     bottleneckSegment: eval.bottleneckSegment,
                     isInferred: eval.isInferred,
+                    isPhysicalPortInferred: physicalPort != nil,
                     verdict: eval.verdict,
                     diagnosticDetail: eval.detail
                 )

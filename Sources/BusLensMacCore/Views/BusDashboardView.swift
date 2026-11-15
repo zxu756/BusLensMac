@@ -293,16 +293,7 @@ public struct BusDashboardView: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.94))
                     .lineLimit(1)
-                let maxLabel = ctrl.localizedMaxRateLabel(localizer)
-                Text(ctrl.isConnected
-                     ? localizer.L(
-                        "\(ctrl.devices.count) dev · ceiling \(maxLabel)",
-                        "\(ctrl.devices.count) 台设备 · 上限 \(maxLabel)"
-                     )
-                     : localizer.L(
-                        "Idle · ceiling \(maxLabel)",
-                        "未连接 · 上限 \(maxLabel)"
-                     ))
+                Text(Self.physicalPortModuleSubtitle(for: ctrl, localizer: localizer))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(BenchTheme.portSilk)
                     .lineLimit(1)
@@ -538,9 +529,41 @@ public struct BusDashboardView: View {
     }
 
     @MainActor
+    public static func physicalPortModuleSubtitle(for ctrl: PhysicalPortController, localizer: AppLocalizer) -> String {
+        let maxLabel = ctrl.localizedMaxRateLabel(localizer)
+        guard ctrl.isConnected else {
+            return localizer.L(
+                "Idle · ceiling \(maxLabel)",
+                "未连接 · 上限 \(maxLabel)"
+            )
+        }
+        let warnedDevices = ctrl.devices.filter { $0.verdict.isWarning }
+        let inferredWarnCount = warnedDevices.filter(\.isInferred).count
+        if inferredWarnCount > 0 {
+            return localizer.L(
+                "\(ctrl.devices.count) dev · ceiling \(maxLabel) · throttled (inferred)",
+                "\(ctrl.devices.count) 台 · 上限 \(maxLabel) · 限速（推断）"
+            )
+        }
+        if ctrl.devices.contains(where: \.isInferred) {
+            return localizer.L(
+                "\(ctrl.devices.count) dev · ceiling \(maxLabel) · inferred",
+                "\(ctrl.devices.count) 台 · 上限 \(maxLabel) · 含推断"
+            )
+        }
+        return localizer.L(
+            "\(ctrl.devices.count) dev · ceiling \(maxLabel)",
+            "\(ctrl.devices.count) 台设备 · 上限 \(maxLabel)"
+        )
+    }
+
+    @MainActor
     public static func topologyPortLine(for dev: AttachedBusDevice, localizer: AppLocalizer) -> String {
         let portDisplay: String = {
             if let p = dev.physicalPort, !p.isEmpty {
+                if dev.isPhysicalPortInferred || dev.isInferred {
+                    return localizer.L("\(p) (inferred)", "\(p)（推断）")
+                }
                 return p
             }
             return localizer.L("Port: Unknown", "端口：未知")
