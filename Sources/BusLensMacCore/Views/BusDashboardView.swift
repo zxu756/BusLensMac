@@ -476,7 +476,7 @@ public struct BusDashboardView: View {
 
             // Topology Path
             VStack(alignment: .leading, spacing: 2) {
-                Text(dev.localizedBusName(localizer))
+                Text(dev.physicalPort != nil ? "\(dev.localizedBusName(localizer)) · \(dev.physicalPort!)" : dev.localizedBusName(localizer))
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(BenchTheme.ink)
                     .lineLimit(1)

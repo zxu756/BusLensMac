@@ -21,6 +21,7 @@ public struct BusMenuBarView: View {
 
     public var body: some View {
         let indetCount = monitor.snapshot.indeterminateDevices.count
+        let throttledCount = monitor.snapshot.throttledDevices.count
 
         VStack(alignment: .leading, spacing: 0) {
             // Anodized Header + Compact Mini Port Strip
@@ -63,9 +64,11 @@ public struct BusMenuBarView: View {
 
                     Text(monitor.snapshot.devices.isEmpty
                          ? localizer.L("Ports idle", "端口空闲")
-                         : (indetCount > 0
-                            ? localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
-                            : localizer.L("Full / USB 1.x rate", "满速 / USB 1.x 低速外设")))
+                         : (throttledCount > 0
+                            ? localizer.L("\(throttledCount) throttled", "\(throttledCount) 台被限速")
+                            : (indetCount > 0
+                               ? localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
+                               : localizer.L("All links healthy", "链路速率正常"))))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(BenchTheme.ink)
                         .padding(.horizontal, 8)

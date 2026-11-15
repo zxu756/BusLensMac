@@ -1,28 +1,29 @@
 === BusLens Mac M0 Acceptance Gate ===
-Date (UTC): 2026-11-14T08:48:19Z
+Date (UTC): 2026-11-15T04:56:56Z
 Host: macOS 27.0.1 (26A434) arm64
 Binary: <REPO_ROOT>/.build/out/Products/Debug/BusLensMac
 
-[PASS] Row 1: 50x consecutive `--cli topology --json` (25 en + 25 zh): all 50 exited 0 under 5.0s (min=259.7ms, median=327.7ms, max=519.6ms, total=16.88s, 0 identifier leaks)
+[PASS] Row 1: 50x consecutive `--cli topology --json` (25 en + 25 zh): all 50 exited 0 under 5.0s (min=220.1ms, median=284.0ms, max=422.5ms, total=14.78s, 0 identifier leaks)
 [PASS] Row 2: `--cli bogus` (--lang en, --lang zh, default) exited with code 2, 0-byte stdout, localized stderr
 [PASS] Row 3: Synthetic TB device 20 Gb/s on 40 Gb/s bus (+ daisy-chain) reports '20 Gb/s' (not 40 Gb/s) in EN & ZH
 [PASS] Row 4: Synthetic Samsung T7 at 10 Gb/s is indeterminate (ceiling Unknown/未知), never flagged throttled or told to replace cable in EN & ZH
-[PASS] U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', 'Wooting 60HE' -> Indeterminate / 无法判断是否被限速; only USB 1.x (1.5/12 Mb/s) -> Low-speed peripheral; 0 brand hints in Sources/
+[PASS] U9: 480 Mb/s & unclassified 12 Mb/s -> Indeterminate / 无法判断是否被限速; only verified HID class 3 (1.5/12 Mb/s) -> HID peripheral; 0 brand hints in Sources/
 [PASS] U10: 480 Mb/s leaf 'Hubble Backup Drive' preserved in CLI JSON and text output (never hidden by 'hub' substring)
 [PASS] U11: Sibling Thunderbolt bus omitting speed reports ceilingGbps=null / Unknown / 未知 (no cross-bus ceiling copy)
 [PASS] U12: Missing SPPowerDataType reports powerSource=null, lowPowerMode=null, and Unknown / 未知 in EN & ZH
-[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s full_rate, 480 Mb/s indeterminate, 12 Mb/s low_speed_peripheral), 0 internal-hub false positives, 0 identifier leaks
-[PASS] Row 6: `swift test --no-parallel` passed with 0 changes to ~/Library/Preferences (files=879, sha256=4a2d349397cf... identical)
-[PASS] W1 M1 (U1: redact receptacle_upstream_ambiguous_tag) -> compiled & killed by `CollectorTests/testThunderboltPerDeviceSpeedPreservedOn40GbpsBus` (rc=1, 13.36s)
-[PASS] W1 M2 (U2: blame cable with 40 Gb/s advice on Indeterminate) -> compiled & killed by `DiagnoserTests/testSamsungT7Native10GbpsNotFlaggedAsBottleneck` (rc=1, 5.03s)
-[PASS] W1 M3 (U3: fabricate 10 Gb/s USB controller ceiling when missing) -> compiled & killed by `CollectorTests/testUnknownBusCeilingsAreNotFabricated` (rc=1, 2.71s)
-[PASS] W1 M4 (U5: disable Apple Built-in USB hub recognition) -> compiled & killed by `CollectorTests/testRealHostMacMiniScrubbedFixtureAndInternalHubHandling` (rc=1, 2.52s)
-[PASS] W1 M5 (U6: return exitCode 0 instead of 2 on unknown CLI subcommand) -> compiled & killed by `CLITests/testUnknownSubcommandAndOptionsExitWithCode2` (rc=1, 3.27s)
-[PASS] W1 M6 (U8: drop string 'yes' from Low Power Mode boolean parser) -> compiled & killed by `CollectorTests/testLowPowerModeStringIntegerAndPmsetParsing` (rc=1, 3.28s)
-[PASS] W1 M7 (U9: reintroduce 'ups'/'hid' product-name guessing for lowSpeedPeripheral) -> compiled & killed by `DiagnoserTests/testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps` (rc=1, 2.62s)
-[PASS] W1 M8 (U10: reintroduce name.contains('hub') hiding Hubble Backup Drive) -> compiled & killed by `CollectorTests/testHubbleBackupDriveNotHiddenByHubSubstring` (rc=1, 2.60s)
-[PASS] W1 M9 (U11: fabricate 40 Gb/s ceiling on sibling Thunderbolt bus omitting speed) -> compiled & killed by `CollectorTests/testSiblingThunderboltBusDoesNotCopyCeiling` (rc=1, 2.82s)
-[PASS] W1 M10 (U12: default missing power telemetry to AC Power & Low Power Mode false) -> compiled & killed by `CollectorTests/testMissingPowerTelemetryReportsUnknownNotACPowerOrFalse` (rc=1, 2.87s)
+[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s full_rate, 480 Mb/s indeterminate, 12 Mb/s indeterminate without ioreg), 0 internal-hub false positives, 0 identifier leaks
+[PASS] Row 6: `swift test --no-parallel` passed with 0 changes to ~/Library/Preferences (files=756, sha256=5b55a1eeadc5... identical)
+[PASS] W1 M1 (U1: redact receptacle_upstream_ambiguous_tag) -> compiled & killed by `CollectorTests/testThunderboltPerDeviceSpeedPreservedOn40GbpsBus` (rc=1, 20.63s)
+[PASS] W1 M2 (U2: blame cable with 40 Gb/s advice on Indeterminate) -> compiled & killed by `DiagnoserTests/testSamsungT7Native10GbpsNotFlaggedAsBottleneck` (rc=1, 8.03s)
+[PASS] W1 M3 (U3: fabricate 10 Gb/s USB controller ceiling when missing) -> compiled & killed by `CollectorTests/testUnknownBusCeilingsAreNotFabricated` (rc=1, 3.24s)
+[PASS] W1 M4 (U5: disable Apple Built-in USB hub recognition) -> compiled & killed by `CollectorTests/testRealHostMacMiniScrubbedFixtureAndInternalHubHandling` (rc=1, 3.34s)
+[PASS] W1 M5 (U6: return exitCode 0 instead of 2 on unknown CLI subcommand) -> compiled & killed by `CLITests/testUnknownSubcommandAndOptionsExitWithCode2` (rc=1, 4.09s)
+[PASS] W1 M6 (U8: drop string 'yes' from Low Power Mode boolean parser) -> compiled & killed by `CollectorTests/testLowPowerModeStringIntegerAndPmsetParsing` (rc=1, 3.12s)
+[PASS] W1 M7 (U9: reintroduce blanket speed-based lowSpeedPeripheral at <= 480 Mb/s) -> compiled & killed by `DiagnoserTests/testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps` (rc=1, 3.35s)
+[PASS] W1 M8 (U10: reintroduce name.contains('hub') hiding Hubble Backup Drive) -> compiled & killed by `CollectorTests/testHubbleBackupDriveNotHiddenByHubSubstring` (rc=1, 3.49s)
+[PASS] W1 M9 (U11: fabricate 40 Gb/s ceiling on sibling Thunderbolt bus omitting speed) -> compiled & killed by `CollectorTests/testSiblingThunderboltBusDoesNotCopyCeiling` (rc=1, 5.04s)
+[PASS] W1 M10 (U12: default missing power telemetry to AC Power & Low Power Mode false) -> compiled & killed by `CollectorTests/testMissingPowerTelemetryReportsUnknownNotACPowerOrFalse` (rc=1, 5.79s)
 [PASS] W1: All 10 scripted mutations compiled and were killed by named assertions in isolated temp workspace
+M0_SUMMARY: passed=20 failed=0 skipped=0
 
 === ALL 6 M0 ACCEPTANCE ROWS + U9-U12 + W1 MUTATION CHECKS PASSED ===

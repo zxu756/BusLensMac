@@ -238,7 +238,7 @@ struct CollectorTests {
 
         #expect(ajazz.negotiatedSpeedLabel == "12 Mb/s")
         #expect(ajazz.negotiatedGbps == 0.012)
-        #expect(ajazz.verdict == .lowSpeedPeripheral)
+        #expect(ajazz.verdict == .indeterminate)
         #expect(ajazz.depth == 0)
         #expect(ajazz.behindExternalHub == false)
         #expect(!ajazz.modeDescription.lowercased().contains("hub"))
@@ -277,6 +277,7 @@ struct CollectorTests {
                 },
                 {
                   "_name": "4-Port USB 3.0 Hub",
+                  "bDeviceClass": 9,
                   "speed": "Up to 5 Gb/s",
                   "_items": [
                     {
@@ -319,7 +320,7 @@ struct CollectorTests {
         let externalHubKB = try #require(snap.devices.first { $0.name == "Apple Keyboard" })
         #expect(externalHubKB.negotiatedSpeedLabel == "12 Mb/s")
         #expect(externalHubKB.behindExternalHub == true)
-        #expect(externalHubKB.verdict == .lowSpeedPeripheral)
+        #expect(externalHubKB.verdict == .indeterminate)
     }
 
     @Test("U10: Leaf USB devices containing 'hub' in name ('Hubble Backup Drive', empty 'Generic 4-Port Hub') are never hidden by product-name substring matching")
@@ -344,6 +345,7 @@ struct CollectorTests {
                 },
                 {
                   "_name": "Anker USB-C Adapter",
+                  "bDeviceClass": 9,
                   "manufacturer": "Anker",
                   "speed": "Up to 5 Gb/s",
                   "_items": [
@@ -450,5 +452,157 @@ struct CollectorTests {
 
         let zhJSON = try BusCLIRunner.renderTopologyJSON(snapshot: emptySnap, localizer: zh, isDemo: false)
         #expect(zhJSON.contains(#""localizedBadge" : "未知""#))
+    }
+
+    @Test("U13: Only USB Device Class 9 (or built-in root hub) is hidden as hub container; 10 Gb/s composite/billboard docks with child devices remain visible")
+    @MainActor
+    func testU13NonHubClassDockWithChildRemainsVisible() throws {
+        let syntheticDockJSON = """
+        {
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x02000000",
+              "_items": [
+                {
+                  "_name": "Composite 10G Creator Dock",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "bDeviceClass": 0,
+                  "_items": [
+                    {
+                      "_name": "Downstream Card Reader",
+                      "USBDeviceKeyVendorName": "Acme",
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
+                      "bDeviceClass": 0
+                    }
+                  ]
+                },
+                {
+                  "_name": "Billboard 10G Video Dock",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "bDeviceClass": 17,
+                  "_items": [
+                    {
+                      "_name": "Dock Audio Endpoint",
+                      "USBDeviceKeyVendorName": "Acme",
+                      "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                      "bDeviceClass": 0
+                    }
+                  ]
+                },
+                {
+                  "_name": "Explicit Class-9 USB3 Hub",
+                  "USBDeviceKeyVendorName": "Genesys",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "bDeviceClass": 9,
+                  "_items": [
+                    {
+                      "_name": "Hub Child SSD",
+                      "USBDeviceKeyVendorName": "Acme",
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
+                      "bDeviceClass": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticDockJSON.utf8))
+        let names = snap.devices.map(\.name)
+        #expect(names.contains("Composite 10G Creator Dock"))
+        #expect(names.contains("Downstream Card Reader"))
+        #expect(names.contains("Billboard 10G Video Dock"))
+        #expect(names.contains("Dock Audio Endpoint"))
+        #expect(!names.contains("Explicit Class-9 USB3 Hub"))
+        #expect(names.contains("Hub Child SSD"))
+    }
+
+    @Test("M1 Items 1 & 3 (U5): Real 2026-11-15 Mac mini system_profiler + ioreg pair maps physical ports (Port-USB-C@2, Port-USB-C@6), companion ceilings, TB capability, and HID class")
+    @MainActor
+    func testM1Real20261115PairedFixtureAndPhysicalPortMapping() throws {
+        let fixturesDir = Self.hostFixtureURL.deletingLastPathComponent()
+        let spData = try Data(contentsOf: fixturesDir.appendingPathComponent("host_macmini_20261115_sp_scrubbed.json"))
+        let ioregData = try Data(contentsOf: fixturesDir.appendingPathComponent("host_macmini_20261115_ioreg_scrubbed.plist"))
+
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(ioregData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(spData, ioregSnapshot: ioregSnap)
+
+        #expect(snap.devices.count == 2)
+
+        let tbEnclosure = try #require(snap.devices.first { $0.name == "TBU405Pro" })
+        #expect(tbEnclosure.negotiatedGbps == 40.0)
+        #expect(tbEnclosure.portCeilingGbps == 40.0)
+        #expect(tbEnclosure.deviceMaxGbps == 40.0)
+        #expect(tbEnclosure.physicalPort == "Port-USB-C@2")
+        #expect(tbEnclosure.verdict == .fullRate)
+        #expect(tbEnclosure.behindExternalHub == false)
+
+        let receiver = try #require(snap.devices.first { $0.name == "AJAZZ AJ159 APEX" })
+        #expect(receiver.negotiatedGbps == 0.012)
+        #expect(receiver.portCeilingGbps == 10.0)
+        #expect(receiver.physicalPort == "Port-USB-C@6")
+        #expect(receiver.locationID == "0x02120000")
+        #expect(receiver.behindExternalHub == false)
+        #expect(receiver.capability?.bcdUSB == 512)
+        #expect(receiver.capability?.usbInterfaceClasses == [3, 3, 3])
+        #expect(receiver.verdict == .lowSpeedPeripheral)
+
+        // Verify sibling devices under same 0x02000000 XHCI controller & built-in USB2 Hub map to distinct physical ports
+        let twoFrontPortsSP = """
+        {
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x02000000",
+              "_items": [
+                {
+                  "_name": "USB2 Hub",
+                  "USBKeyHardwareType": "Built-in",
+                  "USBKeyLocationID": "0x02100000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "_items": [
+                    {
+                      "_name": "Front Left Keyboard",
+                      "USBKeyLocationID": "0x02110000",
+                      "USBDeviceKeyLinkSpeed": "480 Mb/s"
+                    },
+                    {
+                      "_name": "External Hub On Front Right",
+                      "USBKeyLocationID": "0x02120000",
+                      "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                      "bDeviceClass": 9,
+                      "_items": [
+                        {
+                          "_name": "Downstream Drive On Hub Port 3",
+                          "USBKeyLocationID": "0x02123000",
+                          "USBDeviceKeyLinkSpeed": "480 Mb/s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """
+        let twoFrontSnap = try BusProfilerCollector.parseSystemProfilerJSONValidated(
+            Data(twoFrontPortsSP.utf8),
+            ioregSnapshot: ioregSnap
+        )
+        let leftDev = try #require(twoFrontSnap.devices.first { $0.name == "Front Left Keyboard" })
+        let rightChild = try #require(twoFrontSnap.devices.first { $0.name == "Downstream Drive On Hub Port 3" })
+        #expect(leftDev.physicalPort == "Port-USB-C@5")
+        #expect(leftDev.portCeilingGbps == 10.0)
+        #expect(leftDev.behindExternalHub == false)
+
+        #expect(rightChild.physicalPort == "Port-USB-C@6")
+        #expect(rightChild.portCeilingGbps == 10.0)
+        #expect(rightChild.behindExternalHub == true)
+        #expect(rightChild.upstreamHubGbps == 0.48)
     }
 }

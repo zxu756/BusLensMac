@@ -71,7 +71,7 @@ def snapshot_preferences(prefs_dir: pathlib.Path) -> tuple[int, str, dict[str, s
         digest.update(b"\n")
     return len(per_file), digest.hexdigest(), per_file
 
-# Extract live serials/UUIDs from system_profiler (read-only) to verify zero leakage
+# Extract live serials/UUIDs from system_profiler & ioreg (read-only) to verify zero leakage
 live_secrets = set()
 try:
     sp_raw = subprocess.check_output([
@@ -87,7 +87,7 @@ try:
         if isinstance(obj, dict):
             for k, v in obj.items():
                 kl = k.lower()
-                if k in {"serial_num", "device_serial", "USBDeviceKeySerialNumber", "domain_uuid_key", "switch_uid_key"} or "serial" in kl or "uuid" in kl or "uid_key" in kl:
+                if k in {"serial_num", "device_serial", "USBDeviceKeySerialNumber", "domain_uuid_key", "switch_uid_key", "kUSBSerialNumberString", "USB Serial Number", "Device GUID"} or "serial" in kl or "uuid" in kl or "uid_key" in kl or "switch uid" in kl:
                     if isinstance(v, str) and len(v.strip()) >= 4:
                         live_secrets.add(v.strip())
                 else:
@@ -255,17 +255,27 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert t7["portCeilingLabel"] == expected_ceiling
         assert t7["verdict"] == "indeterminate"
         assert t7["diagnosticDetail"] == expected_phrase
+        assert t7["bottleneckSegment"] is None and t7["bottleneckSegmentLabel"] is None
 
         rc_t, out_t, _, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(c6_path), "--lang", lang])
         assert rc_t == 0
+        t7_json_values = " ".join(
+            str(v) for v in (
+                pj.get("headline", ""),
+                t7.get("verdict", ""),
+                t7.get("verdictLabel", ""),
+                t7.get("diagnosticDetail", ""),
+                t7.get("portCeilingLabel", ""),
+            )
+        )
         for forbidden in ("40 Gb/s", "replace", "bottleneck", "WARN", "更换", "瓶颈"):
             assert forbidden.lower() not in out_t.lower(), f"Row 4 ({lang}) found forbidden token {forbidden!r} in {out_t!r}"
-            assert forbidden.lower() not in out_j.lower(), f"Row 4 ({lang} json) found forbidden token {forbidden!r}"
+            assert forbidden.lower() not in t7_json_values.lower(), f"Row 4 ({lang} json) found forbidden token {forbidden!r} in {t7_json_values!r}"
 
     print("[PASS] Row 4: Synthetic Samsung T7 at 10 Gb/s is indeterminate (ceiling Unknown/未知), never flagged throttled or told to replace cable in EN & ZH")
 
     # -----------------------------------------------------------------------
-    # Supplemental U9: 480 Mb/s "Groups Backup Drive", "Hidden Disk", "Wooting 60HE"
+    # Supplemental U9 & U14: 480 Mb/s & unclassified 12 Mb/s -> Indeterminate; verified HID class 3 -> HID peripheral
     # -----------------------------------------------------------------------
     u9_path = tmp / "u9_no_name_guessing.json"
     u9_path.write_text(json.dumps({
@@ -276,24 +286,25 @@ with tempfile.TemporaryDirectory() as tmpdir:
                 {"_name": "Groups Backup Drive", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
                 {"_name": "Hidden Disk", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
                 {"_name": "Wooting 60HE", "manufacturer": "Wooting", "speed": "Up to 480 Mb/s"},
-                {"_name": "USB 1.0 Device", "manufacturer": "Generic", "speed": "Up to 1.5 Mb/s"},
-                {"_name": "USB 1.1 Receiver", "manufacturer": "Generic", "speed": "Up to 12 Mb/s"}
+                {"_name": "Unclassified 12M Disk", "manufacturer": "Acme Storage", "speed": "Up to 12 Mb/s"},
+                {"_name": "USB 1.0 HID Device", "manufacturer": "Generic", "speed": "Up to 1.5 Mb/s", "bInterfaceClass": 3},
+                {"_name": "USB 1.1 HID Receiver", "manufacturer": "Generic", "speed": "Up to 12 Mb/s", "bInterfaceClass": 3}
             ]
         }]
     }), encoding="utf-8")
 
     for lang, exp_indet_lbl, exp_low_lbl in [
-        ("en", "Indeterminate", "Low-speed peripheral"),
-        ("zh", "无法判断是否被限速", "低速外设（USB 1.x）"),
+        ("en", "Indeterminate", "HID peripheral"),
+        ("zh", "无法判断是否被限速", "HID / 低速外设"),
     ]:
         rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u9_path), "--json", "--lang", lang])
         assert rc_j == 0 and err_j == ""
         pj = json.loads(out_j)
         by_name = {d["name"]: d for d in pj["devices"]}
-        for dev_name in ("Groups Backup Drive", "Hidden Disk", "Wooting 60HE"):
+        for dev_name in ("Groups Backup Drive", "Hidden Disk", "Wooting 60HE", "Unclassified 12M Disk"):
             assert by_name[dev_name]["verdict"] == "indeterminate", f"U9 ({lang}) {dev_name} misclassified: {by_name[dev_name]}"
             assert by_name[dev_name]["verdictLabel"] == exp_indet_lbl
-        for dev_name in ("USB 1.0 Device", "USB 1.1 Receiver"):
+        for dev_name in ("USB 1.0 HID Device", "USB 1.1 HID Receiver"):
             assert by_name[dev_name]["verdict"] == "low_speed_peripheral"
             assert by_name[dev_name]["verdictLabel"] == exp_low_lbl
 
@@ -303,7 +314,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         m = brand_re.search(swift_file.read_text(encoding="utf-8"))
         assert m is None, f"U9 found brand keyword {m.group(0)!r} in {swift_file}"
 
-    print("[PASS] U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', 'Wooting 60HE' -> Indeterminate / 无法判断是否被限速; only USB 1.x (1.5/12 Mb/s) -> Low-speed peripheral; 0 brand hints in Sources/")
+    print("[PASS] U9: 480 Mb/s & unclassified 12 Mb/s -> Indeterminate / 无法判断是否被限速; only verified HID class 3 (1.5/12 Mb/s) -> HID peripheral; 0 brand hints in Sources/")
 
     # -----------------------------------------------------------------------
     # Supplemental U10: 480 Mb/s "Hubble Backup Drive" preserved in device list
@@ -400,7 +411,7 @@ for secret in live_secrets:
 expected_devices = {
     "TBU405Pro": ("40 Gb/s", "full_rate", None, False),
     "Wooting 60HE v2": ("480 Mb/s", "indeterminate", None, False),
-    "AJAZZ AJ159 APEX": ("12 Mb/s", "low_speed_peripheral", None, False),
+    "AJAZZ AJ159 APEX": ("12 Mb/s", "indeterminate", None, False),
 }
 
 for lang in ("en", "zh"):
@@ -421,10 +432,10 @@ for lang in ("en", "zh"):
     rc_t, out_t, _, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(host_fixture), "--lang", lang])
     assert rc_t == 0
     if lang == "en":
-        assert "[Low-speed peripheral]" in out_t, "Row 5 EN truncated Low-speed peripheral label!"
+        assert "[Full bus rate" in out_t
         assert "[Indeterminate" in out_t
     else:
-        assert "低速外设（USB 1.x）" in out_t
+        assert "满速" in out_t
         assert "无法判断是否被限速" in out_t
 
 # Verify Sources/ contains zero storage keyword guesses and preserves receptacle_upstream_ambiguous_tag
@@ -437,7 +448,7 @@ for swift_file in (root / "Sources").rglob("*.swift"):
         else:
             assert banned not in src, f"Banned token {banned} found in {swift_file}"
 
-print("[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s full_rate, 480 Mb/s indeterminate, 12 Mb/s low_speed_peripheral), 0 internal-hub false positives, 0 identifier leaks")
+print("[PASS] Row 5: Real scrubbed fixture `host_macmini_scrubbed.json` parsed 3 devices (40 Gb/s full_rate, 480 Mb/s indeterminate, 12 Mb/s indeterminate without ioreg), 0 internal-hub false positives, 0 identifier leaks")
 
 # ---------------------------------------------------------------------------
 # Row 6: `swift test --no-parallel` leaves ~/Library/Preferences count & sha256 identical
@@ -492,8 +503,8 @@ mutations = [
     (
         "M2 (U2: blame cable with 40 Gb/s advice on Indeterminate)",
         "Sources/BusLensMacCore/Diagnostics/BottleneckDiagnoser.swift",
-        '"Negotiated at \\(rate); cannot determine if cable/hub-limited without device max capability."',
-        '"Negotiated at \\(rate); bottleneck detected — replace cable with 40 Gb/s lead."',
+        '        guard let capability else {\n            return DeviceDiagnosticEvaluation(\n                verdict: .indeterminate,\n                detail: "Negotiated at \\(rateLabel); cannot determine if cable/hub-limited without device max capability."',
+        '        guard let capability else {\n            return DeviceDiagnosticEvaluation(\n                verdict: .throttled,\n                detail: "Negotiated at \\(rateLabel); bottleneck detected — replace cable with 40 Gb/s lead."',
         "DiagnoserTests/testSamsungT7Native10GbpsNotFlaggedAsBottleneck",
         "U2 / Row 4: Samsung T7 at 10 Gb/s",
     ),
@@ -530,18 +541,18 @@ mutations = [
         "U8: Low Power Mode accepts string",
     ),
     (
-        "M7 (U9: reintroduce 'ups'/'hid' product-name guessing for lowSpeedPeripheral)",
+        "M7 (U9: reintroduce blanket speed-based lowSpeedPeripheral at <= 480 Mb/s)",
         "Sources/BusLensMacCore/Diagnostics/BottleneckDiagnoser.swift",
-        "if protocolKind == .usbHost && negotiatedGbps > 0 && negotiatedGbps <= usb1FullSpeedMaxGbps {",
-        'if protocolKind == .usbHost && negotiatedGbps > 0 && (negotiatedGbps <= usb1FullSpeedMaxGbps || name.lowercased().contains("ups") || name.lowercased().contains("hid")) {',
+        "        guard let capability else {",
+        '        if negotiatedGbps <= 0.48 { return DeviceDiagnosticEvaluation(verdict: .lowSpeedPeripheral, detail: "HID") }\n        guard let capability else {',
         "DiagnoserTests/testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps",
         "U9: 480 Mb/s 'Groups Backup Drive'",
     ),
     (
         "M8 (U10: reintroduce name.contains('hub') hiding Hubble Backup Drive)",
         "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
-        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty",
-        'let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty || name.lowercased().contains("hub")',
+        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9)",
+        'let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9) || name.lowercased().contains("hub")',
         "CollectorTests/testHubbleBackupDriveNotHiddenByHubSubstring",
         "U10: Leaf USB devices containing 'hub'",
     ),
@@ -610,5 +621,6 @@ with tempfile.TemporaryDirectory(prefix="buslens-m0-mut-") as mut_root_raw:
     assert rc_clean == 0, f"W1 restored temp repo failed clean check:\n{out_clean}\n{err_clean}"
 
 print(f"[PASS] W1: All {len(mutations)} scripted mutations compiled and were killed by named assertions in isolated temp workspace")
+print("M0_SUMMARY: passed=20 failed=0 skipped=0")
 print("\n=== ALL 6 M0 ACCEPTANCE ROWS + U9-U12 + W1 MUTATION CHECKS PASSED ===")
 PY

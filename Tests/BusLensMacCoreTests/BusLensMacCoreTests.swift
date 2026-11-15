@@ -58,13 +58,23 @@ struct BusLensMacCoreTests {
         )
         #expect(usb2KB.verdict == .indeterminate)
 
-        let usb1Receiver = BottleneckDiagnoser.evaluateDevice(
-            name: "Full-Speed Receiver",
+        let usb1Unknown = BottleneckDiagnoser.evaluateDevice(
+            name: "Full-Speed Device",
             vendor: "Generic",
             protocolKind: .usbHost,
             negotiatedGbps: 0.012,
             portCeilingGbps: nil,
             behindHub: false
+        )
+        #expect(usb1Unknown.verdict == .indeterminate)
+
+        let usb1Receiver = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.012,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            upstreamHubGbps: nil,
+            capability: DeviceCapabilityDescriptor(usbInterfaceClasses: [3])
         )
         #expect(usb1Receiver.verdict == .lowSpeedPeripheral)
     }
@@ -98,6 +108,7 @@ struct BusLensMacCoreTests {
               "_items": [
                 {
                   "_name": "USB2 Hub",
+                  "bDeviceClass": 9,
                   "USBDeviceKeyLinkSpeed": "480 Mb/s",
                   "_items": [
                     {
@@ -166,7 +177,7 @@ struct BusLensMacCoreTests {
         #expect(store.string(forKey: AppLocalizer.defaultPreferenceKey) == "zh-Hans")
         #expect(LinkHealthVerdict.indeterminate.localizedLabel(localizer) == "无法判断是否被限速")
         #expect(LinkHealthVerdict.fullRate.localizedLabel(localizer) == "满速")
-        #expect(LinkHealthVerdict.lowSpeedPeripheral.localizedLabel(localizer) == "低速外设（USB 1.x）")
+        #expect(LinkHealthVerdict.lowSpeedPeripheral.localizedLabel(localizer) == "HID / 低速外设")
 
         let preview = BusLensMonitor.preview()
         let usb480 = preview.snapshot.indeterminateDevices.first { $0.negotiatedGbps <= 0.5 }!

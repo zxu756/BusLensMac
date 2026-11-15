@@ -1,0 +1,21 @@
+=== BusLens Mac M1 Differential & Capability Gate ===
+Date (UTC): 2026-11-15T04:59:23Z
+Host: macOS 27.0.1 (26A434) arm64
+Binary: <REPO_ROOT>/.build/out/Products/Debug/BusLensMac
+
+[PASS] Row 1 (Live differential oracle vs system_profiler + ioreg in EN & ZH): devices=2 (TB@Port-USB-C@2=40Gbps, USB@Port-USB-C@6=0.012Gbps), 100% match on count/speed/port, 0 leaks across 22 live identifiers
+[SKIP] Row 2 (Real hardware enclosure w/ charging-only cable): 没跑 (requires human cable-swapping)
+[SKIP] Row 3 (Real hardware enclosure w/ stock cable): 没跑 (requires human cable-swapping)
+[PASS] Paired 2026-11-15 scrubbed Mac mini fixture (system_profiler + ioreg): verified capture headers, 0 leaks, and Port-USB-C@2 / Port-USB-C@6 mapping
+[PASS] Row 4: All 16 synthetic scenarios (+ port-limited case) match expected verdicts & cable/hub/port bottleneck segments in EN & ZH
+[PASS] U13: Non-Class-9 10 Gb/s dock with 5 Gb/s downstream child remains visible in device list
+[PASS] U14: 12 Mb/s Mass Storage (bInterfaceClass=8) is diagnosed Throttled (never HID peripheral); verified HID (class=3) gets HID peripheral / HID / 低速外设
+[PASS] Row 5: Zero storage or peripheral keyword guesses in Sources/ (`t7|extreme pro` = 0, `wooting|keychron|logitech|ajazz` = 0)
+[PASS] Row 6: Legacy SPUSBDataType (macOS 14-15) and Thunderbolt 5 (80 Gb/s) explicitly marked Unverified / 尚未在真机上验证 in README.md, README.zh-CN.md, and docs/SPEC.md
+[PASS] W1 M1_bcdUSB (disable bcdUSB == 0x0210 SuperSpeed-on-USB2 capability check) -> compiled & killed by `DiagnoserTests/testM1SixteenSyntheticScenariosWithIORegistryDescriptors` (rc=1, 18.30s)
+[PASS] W1 M2_U13_class9 (hide any USB device with _items regardless of bDeviceClass == 9) -> compiled & killed by `CollectorTests/testU13NonHubClassDockWithChildRemainsVisible` (rc=1, 3.39s)
+[PASS] W1 M3_U14_hidClass3 (blanket-label all <= 12 Mb/s devices as HID peripheral ignoring bInterfaceClass == 8) -> compiled & killed by `DiagnoserTests/testU14TwelveMbpsMassStorageIsNeverLabeledLowSpeedPeripheral` (rc=1, 3.06s)
+[PASS] W1 M4_U5_portMapping (drop locationID -> AppleUSBHostPort physical port mapping) -> compiled & killed by `CollectorTests/testM1Real20261115PairedFixtureAndPhysicalPortMapping` (rc=1, 3.21s)
+
+M1_SUMMARY: passed=11 failed=0 skipped=2
+=== M1 DIFFERENTIAL, CAPABILITY, U13/U14 & MUTATION GATE PASSED (2 REAL-CABLE ROWS SKIPPED: 没跑) ===

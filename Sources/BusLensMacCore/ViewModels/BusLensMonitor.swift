@@ -150,8 +150,9 @@ public final class BusLensMonitor: ObservableObject {
             portCeilingGbps: nil,
             depth: 0,
             modeDescription: "direct host bus",
+            capability: DeviceCapabilityDescriptor(usbInterfaceClasses: [3]),
             verdict: .lowSpeedPeripheral,
-            diagnosticDetail: "Negotiated at 12 Mb/s (USB 1.x link rate)."
+            diagnosticDetail: "Negotiated at 12 Mb/s (HID peripheral)."
         )
 
         let controllers: [PhysicalPortController] = [

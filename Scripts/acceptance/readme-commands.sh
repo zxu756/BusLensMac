@@ -31,17 +31,18 @@ readme_en = (root / "README.md").read_text(encoding="utf-8")
 readme_zh = (root / "README.zh-CN.md").read_text(encoding="utf-8")
 spec_md = (root / "docs/SPEC.md").read_text(encoding="utf-8")
 
-# 1. Verify W5 title hygiene & Unreleased labels + required honesty disclosures
+# 1. Verify title hygiene & Unreleased labels + required honesty disclosures
 assert re.search(r"^# BusLens Mac\s*$", readme_en, flags=re.M), "README.md title must be clean '# BusLens Mac' without branch/tag suffix"
 assert re.search(r"^# BusLens Mac\s*$", readme_zh, flags=re.M), "README.zh-CN.md title must be clean '# BusLens Mac' without branch/tag suffix"
-assert "(m0/honest)" not in readme_en and "(m0/honest)" not in readme_zh, "README must not contain '(m0/honest)'"
+for forbidden_branch in ("(m0/honest)", "(m1/real)"):
+    assert forbidden_branch not in readme_en and forbidden_branch not in readme_zh, f"README must not contain {forbidden_branch!r}"
 
 for required_en in [
     "[DEMO]",
     "BusLensMonitor.preview()",
     "Unreleased (after v0.2.0)",
     "Unverified on real hardware (synthetic fixtures only)",
-    "Planned (M1)",
+    "Planned (M2)",
 ]:
     assert required_en in readme_en, f"README.md missing required disclosure: {required_en!r}"
 
@@ -50,7 +51,7 @@ for required_zh in [
     "BusLensMonitor.preview()",
     "未发布（v0.2.0 之后）",
     "尚未在真机上验证（仅合成样本测试）",
-    "计划中（M1）",
+    "计划中（M2）",
 ]:
     assert required_zh in readme_zh, f"README.zh-CN.md missing required disclosure: {required_zh!r}"
 
@@ -75,7 +76,7 @@ def extract_all_bash_commands(markdown_text: str, doc_name: str) -> list[str]:
 cmds_en = extract_all_bash_commands(readme_en, "README.md")
 cmds_zh = extract_all_bash_commands(readme_zh, "README.zh-CN.md")
 
-assert len(cmds_en) >= 15, f"Expected >= 15 commands in README.md, got {len(cmds_en)}"
+assert len(cmds_en) >= 18, f"Expected >= 18 commands in README.md, got {len(cmds_en)}"
 assert cmds_en == cmds_zh, (
     f"Command parity mismatch between README.md and README.zh-CN.md:\nEN={cmds_en}\nZH={cmds_zh}"
 )
@@ -92,8 +93,8 @@ def explicit_skip_reason(cmd: str) -> str | None:
         return "shell directory change builtin; replay already runs inside repository root"
     if cmd.startswith("open "):
         return "launches macOS GUI window; skipped to enforce zero-GUI headless test policy"
-    if cmd == "./Scripts/test.sh milestone 0" and in_milestone_gate:
-        return "already executing inside parent './Scripts/test.sh milestone 0' gate (prevents infinite recursion)"
+    if cmd in ("./Scripts/test.sh milestone 0", "./Scripts/test.sh milestone 1") and in_milestone_gate:
+        return "already executing inside parent './Scripts/test.sh milestone' gate (prevents infinite recursion)"
     return None
 
 def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
@@ -104,6 +105,9 @@ def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
     if cmd == "./Scripts/test.sh milestone 0":
         assert "ALL 6 M0 ACCEPTANCE ROWS" in combined, f"Missing M0 gate pass banner for {cmd}"
         return "M0 acceptance gate passed"
+    if cmd == "./Scripts/test.sh milestone 1":
+        assert "M1 DIFFERENTIAL, CAPABILITY" in combined, f"Missing M1 gate pass banner for {cmd}"
+        return "M1 differential & capability gate passed"
     if cmd == "./Scripts/build-app.sh":
         assert "✓ Built build/BusLensMac.app" in stdout, f"Missing build completion banner for {cmd}"
         assert (root / "build/BusLensMac.app/Contents/MacOS/BusLensMac").is_file()
@@ -124,16 +128,32 @@ def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
         p = json.loads(stdout)
         assert p["language"] == "zh-Hans" and p["isDemo"] is False and isinstance(p["devices"], list)
         return f"JSON valid (language=zh-Hans, isDemo=false, devices={len(p['devices'])})"
+    if cmd.endswith("--cli bottlenecks --lang en"):
+        assert stderr == "" and ("No throttled links detected" in stdout or "Throttled links detected:" in stdout)
+        return stdout.strip().splitlines()[0]
+    if cmd.endswith("--cli bottlenecks --lang zh"):
+        assert stderr == "" and ("未检测到被限速链路" in stdout or "检测到被限速链路：" in stdout)
+        return stdout.strip().splitlines()[0]
+    if "--input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang en" in cmd:
+        assert stderr == ""
+        for token in ("TBU405Pro", "[Port-USB-C@2]", "[Port-USB-C@6]", "[HID peripheral"):
+            assert token in stdout, f"Missing {token!r} in {cmd} output:\n{stdout}"
+        return "Verified Port-USB-C@2 + Port-USB-C@6 + HID peripheral"
+    if "--input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang zh" in cmd:
+        assert stderr == ""
+        for token in ("TBU405Pro", "[Port-USB-C@2]", "[Port-USB-C@6]", "HID / 低速外设"):
+            assert token in stdout, f"Missing {token!r} in {cmd} output:\n{stdout}"
+        return "Verified Port-USB-C@2 + Port-USB-C@6 + HID / 低速外设"
     if "--input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang en" in cmd:
         assert stderr == ""
-        for token in ("TBU405Pro", "Indeterminate", "[Low-speed peripheral]"):
+        for token in ("TBU405Pro", "Indeterminate"):
             assert token in stdout, f"Missing {token!r} in {cmd} output:\n{stdout}"
-        return "Verified TBU405Pro + Indeterminate + [Low-speed peripheral]"
+        return "Verified TBU405Pro + Indeterminate (without ioreg)"
     if "--input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang zh" in cmd:
         assert stderr == ""
-        for token in ("TBU405Pro", "无法判断是否被限速", "低速外设（USB 1.x）"):
+        for token in ("TBU405Pro", "无法判断是否被限速"):
             assert token in stdout, f"Missing {token!r} in {cmd} output:\n{stdout}"
-        return "Verified TBU405Pro + 无法判断是否被限速 + 低速外设（USB 1.x）"
+        return "Verified TBU405Pro + 无法判断是否被限速 (without ioreg)"
     if cmd.endswith("--cli topology --demo --lang en"):
         assert stderr == "" and stdout.startswith("[DEMO]") and "USB 1.1 Full-Speed Receiver" in stdout
         return stdout.strip().splitlines()[0]
@@ -153,10 +173,10 @@ def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
             assert fp.is_file() and fp.stat().st_size > 10_000, f"Missing exported PNG {fn}"
         return stdout.strip()
     if cmd.endswith("--help --lang en"):
-        assert stderr == "" and "Usage:" in stdout and "--cli topology" in stdout
+        assert stderr == "" and "Usage:" in stdout and "--cli topology" in stdout and "bottlenecks" in stdout
         return stdout.strip().splitlines()[0]
     if cmd.endswith("--help --lang zh"):
-        assert stderr == "" and "用法：" in stdout and "--cli topology" in stdout
+        assert stderr == "" and "用法：" in stdout and "--cli topology" in stdout and "bottlenecks" in stdout
         return stdout.strip().splitlines()[0]
     if cmd.endswith("--version"):
         assert stderr == "" and "BusLens Mac 0.2.0" in stdout
@@ -178,9 +198,8 @@ for source_label, cmds in [("README.md", cmds_en), ("README.zh-CN.md", cmds_zh)]
             print(f"[SKIP] [{source_label} #{idx:02d}] `{cmd}` -> reason: {skip_why}")
             continue
 
-        # Avoid rebuilding the release .app twice in the ZH pass when identical command already ran in EN pass
         env = os.environ.copy()
-        if cmd == "./Scripts/test.sh milestone 0":
+        if cmd in ("./Scripts/test.sh milestone 0", "./Scripts/test.sh milestone 1"):
             env["BUSLENS_SKIP_README_REPLAY"] = "1"
 
         argv = shlex.split(cmd)
@@ -196,5 +215,6 @@ for source_label, cmds in [("README.md", cmds_en), ("README.zh-CN.md", cmds_zh)]
 if demo_dir.exists():
     shutil.rmtree(demo_dir)
 
-print(f"\n=== ALL README COMMANDS VERIFIED (executed={executed_count}, skipped={skipped_count}) ===")
+print(f"\nREADME_SUMMARY: passed={executed_count} failed=0 skipped={skipped_count}")
+print(f"=== ALL README COMMANDS VERIFIED (executed={executed_count}, skipped={skipped_count}) ===")
 PY

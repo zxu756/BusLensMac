@@ -3,6 +3,7 @@ import Foundation
 public enum BusCollectorError: Error, Equatable, Sendable {
     case unreadableInput(String)
     case invalidJSONFormat
+    case invalidIORegistryFormat
     case systemProfilerFailed(Int32)
 
     @MainActor
@@ -17,6 +18,11 @@ public enum BusCollectorError: Error, Equatable, Sendable {
             return localizer.L(
                 "Input is not a valid system_profiler JSON object.",
                 "输入内容不是有效的 system_profiler JSON 对象。"
+            )
+        case .invalidIORegistryFormat:
+            return localizer.L(
+                "Input is not a valid ioreg XML property list.",
+                "输入内容不是有效的 ioreg XML 属性列表。"
             )
         case .systemProfilerFailed(let code):
             return localizer.L(
@@ -59,9 +65,15 @@ public enum BusProfilerCollector {
     public static func parseSystemProfilerJSON(
         _ data: Data,
         capturedAt: Date = Date(),
-        pmsetOutput: String? = nil
+        pmsetOutput: String? = nil,
+        ioregSnapshot: IORegistrySnapshot? = nil
     ) -> BusTopologySnapshot {
-        if let snap = try? parseSystemProfilerJSONValidated(data, capturedAt: capturedAt, pmsetOutput: pmsetOutput) {
+        if let snap = try? parseSystemProfilerJSONValidated(
+            data,
+            capturedAt: capturedAt,
+            pmsetOutput: pmsetOutput,
+            ioregSnapshot: ioregSnapshot
+        ) {
             return snap
         }
         return BusTopologySnapshot(
@@ -75,7 +87,8 @@ public enum BusProfilerCollector {
     public static func parseSystemProfilerJSONValidated(
         _ data: Data,
         capturedAt: Date = Date(),
-        pmsetOutput: String? = nil
+        pmsetOutput: String? = nil,
+        ioregSnapshot: IORegistrySnapshot? = nil
     ) throws -> BusTopologySnapshot {
         guard !data.isEmpty,
               let rawObj = try? JSONSerialization.jsonObject(with: data),
@@ -94,6 +107,8 @@ public enum BusProfilerCollector {
 
             for busDict in sortedTB {
                 let rawName = (busDict["_name"] as? String) ?? "Thunderbolt Bus"
+                let routerID = extractTrailingInteger(from: rawName)
+                let tbBusRecord = routerID.flatMap { ioregSnapshot?.thunderboltBusesByRouter[$0] }
                 let displayTitle = prettifyBusName(rawName)
                 let rec = findFirstReceptacle(in: busDict)
                 let speedStr = rec?["current_speed_key"] as? String
@@ -104,16 +119,30 @@ public enum BusProfilerCollector {
                     ? BottleneckDiagnoser.parseSpeedGbps(speedStr!)
                     : 0.0
 
-                let ceilingGbps = explicitReceptacleCeilingGbps(in: rec)
+                let ceilingGbps = explicitReceptacleCeilingGbps(in: rec) ?? tbBusRecord?.portCeilingGbps
+                let busPhysicalPort: String? = {
+                    if let mapped = tbBusRecord?.physicalPortLabel {
+                        return mapped
+                    }
+                    if let rid = rec?["receptacle_id_key"] as? String,
+                       !rid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let trimmed = rid.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return ioregSnapshot?.socketToPhysicalPort[trimmed] ?? "Port-USB-C@\(trimmed)"
+                    }
+                    return nil
+                }()
 
                 var busDevices: [AttachedBusDevice] = []
                 if let children = busDict["_items"] as? [[String: Any]] {
                     walkThunderboltDevices(
                         items: children,
                         busTitle: displayTitle,
+                        routerID: routerID,
+                        physicalPort: busPhysicalPort,
                         fallbackSpeedLabel: speedStr,
                         fallbackGbps: negotiatedGbps,
                         ceilingGbps: ceilingGbps,
+                        ioregSnapshot: ioregSnapshot,
                         depth: 0,
                         into: &busDevices
                     )
@@ -167,19 +196,22 @@ public enum BusProfilerCollector {
                     items: items,
                     busTitle: busTitle,
                     controllerCeilingGbps: controllerCeilingGbps,
+                    ancestorPhysicalPort: nil,
+                    ioregSnapshot: ioregSnapshot,
                     behindExternalHub: false,
                     depth: 0,
                     into: &usbDevices
                 )
             }
             let peak = usbDevices.map(\.negotiatedGbps).max() ?? 0.0
+            let resolvedControllerCeiling = controllerCeilingGbps ?? usbDevices.compactMap(\.portCeilingGbps).max()
             if !usbDevices.isEmpty {
                 controllers.append(
                     PhysicalPortController(
                         id: "usb::\(idx)::\(busTitle)",
                         title: busTitle,
                         protocolKind: .usbHost,
-                        maxGbps: controllerCeilingGbps,
+                        maxGbps: resolvedControllerCeiling,
                         negotiatedGbps: peak,
                         isConnected: true,
                         devices: usbDevices
@@ -213,9 +245,47 @@ public enum BusProfilerCollector {
     }
 
     public static func collectLiveHostValidated() throws -> BusTopologySnapshot {
-        let out = try runSystemProfilerValidated()
-        let pmset = runPmsetOptional()
-        return try parseSystemProfilerJSONValidated(out, capturedAt: Date(), pmsetOutput: pmset)
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var spResult: Result<Data, Error>?
+        var pmsetOutput: String?
+        var ioregSnapshot: IORegistrySnapshot?
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let res = Result { try runSystemProfilerValidated() }
+            lock.lock()
+            spResult = res
+            lock.unlock()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pm = runPmsetOptional()
+            lock.lock()
+            pmsetOutput = pm
+            lock.unlock()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let io = IORegistrySnapshot.collectLiveReadOnly()
+            lock.lock()
+            ioregSnapshot = io
+            lock.unlock()
+            group.leave()
+        }
+
+        group.wait()
+        let out = try (spResult ?? .failure(BusCollectorError.systemProfilerFailed(-1))).get()
+        return try parseSystemProfilerJSONValidated(
+            out,
+            capturedAt: Date(),
+            pmsetOutput: pmsetOutput,
+            ioregSnapshot: ioregSnapshot
+        )
     }
 
     // MARK: - Helpers
@@ -268,12 +338,22 @@ public enum BusProfilerCollector {
         return String(raw[range]).lowercased()
     }
 
+    private static func extractTrailingInteger(from raw: String) -> Int? {
+        if let last = raw.split(separator: "_").last, let val = Int(last) {
+            return val
+        }
+        return nil
+    }
+
     private static func walkThunderboltDevices(
         items: [[String: Any]],
         busTitle: String,
+        routerID: Int?,
+        physicalPort: String?,
         fallbackSpeedLabel: String?,
         fallbackGbps: Double,
         ceilingGbps: Double?,
+        ioregSnapshot: IORegistrySnapshot?,
         depth: Int,
         into out: inout [AttachedBusDevice]
     ) {
@@ -283,23 +363,42 @@ public enum BusProfilerCollector {
                 ?? "Thunderbolt Device"
             let vendor = (item["vendor_name_key"] as? String) ?? "Unknown vendor"
             let mode = (item["mode_key"] as? String) ?? "thunderbolt_3"
+            let routeStr = item["route_string_key"] as? String
             let rec = findDeviceReceptacle(in: item)
             let itemSpeedStr = rec?["current_speed_key"] as? String
+            let tbRecord = ioregSnapshot?.resolveThunderboltDevice(
+                routerID: routerID,
+                routeString: routeStr,
+                name: name
+            )
             let gbps: Double = {
                 if let itemSpeedStr {
                     let parsed = BottleneckDiagnoser.parseSpeedGbps(itemSpeedStr)
                     if parsed > 0 { return parsed }
                 }
+                if let ioNeg = tbRecord?.negotiatedGbps, ioNeg > 0 {
+                    return ioNeg
+                }
                 return fallbackGbps
             }()
 
-            let eval = BottleneckDiagnoser.evaluateDevice(
-                name: name,
-                vendor: vendor,
+            let capability: DeviceCapabilityDescriptor? = {
+                if let tbCap = tbRecord?.capability {
+                    return tbCap
+                }
+                if let rawMax = item["device_max_speed"] as? String {
+                    let g = BottleneckDiagnoser.parseSpeedGbps(rawMax)
+                    if g > 0 { return DeviceCapabilityDescriptor(exactMaxSpeedGbps: g) }
+                }
+                return nil
+            }()
+
+            let eval = BottleneckDiagnoser.evaluate(
                 protocolKind: .thunderboltUSB4,
                 negotiatedGbps: gbps,
                 portCeilingGbps: ceilingGbps,
-                behindHub: depth > 0
+                behindExternalHub: false,
+                capability: capability
             )
 
             out.append(
@@ -308,13 +407,18 @@ public enum BusProfilerCollector {
                     name: name,
                     vendor: vendor,
                     busName: busTitle,
+                    physicalPort: physicalPort,
+                    locationID: routeStr.map { "route:\($0)" },
                     protocolKind: .thunderboltUSB4,
                     negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
                     negotiatedGbps: gbps,
                     portCeilingGbps: ceilingGbps,
+                    deviceMaxGbps: eval.deviceMaxGbps,
                     depth: depth,
                     behindExternalHub: false,
                     modeDescription: mode.replacingOccurrences(of: "_", with: " "),
+                    capability: capability,
+                    bottleneckSegment: eval.bottleneckSegment,
                     verdict: eval.verdict,
                     diagnosticDetail: eval.detail
                 )
@@ -324,9 +428,12 @@ public enum BusProfilerCollector {
                 walkThunderboltDevices(
                     items: nested,
                     busTitle: busTitle,
+                    routerID: routerID,
+                    physicalPort: physicalPort,
                     fallbackSpeedLabel: itemSpeedStr ?? fallbackSpeedLabel,
                     fallbackGbps: gbps,
                     ceilingGbps: ceilingGbps,
+                    ioregSnapshot: ioregSnapshot,
                     depth: depth + 1,
                     into: &out
                 )
@@ -360,11 +467,95 @@ public enum BusProfilerCollector {
         return false
     }
 
+    private static func extractInlineUSBDescriptor(_ item: [String: Any]) -> DeviceCapabilityDescriptor? {
+        let bcd = parseFlexibleInt(item["bcdUSB"])
+        let devClass = parseFlexibleInt(item["bDeviceClass"] ?? item["USBDeviceKeyDeviceClass"] ?? item["device_class"])
+        var ifaceClasses: [Int] = []
+        if let singleIface = parseFlexibleInt(item["bInterfaceClass"] ?? item["interface_class"]) {
+            ifaceClasses.append(singleIface)
+        }
+        if let arr = item["bInterfaceClasses"] as? [Any] {
+            for elem in arr {
+                if let parsed = parseFlexibleInt(elem) {
+                    ifaceClasses.append(parsed)
+                }
+            }
+        }
+        let hasQualifier = parseBoolFlag(item["hasDeviceQualifier"] ?? item["DeviceQualifierDescriptor"]) ?? false
+        let usb3Pref = (parseBoolFlag(item["Usb3LinkPreferred"]) ?? false)
+            || (parseBoolFlag(item["Usb3LinkRequired"]) ?? false)
+        let bbFailed = parseBoolFlag(item["UsbBillboardAltModeFailed"]) ?? false
+        let exactMax: Double? = {
+            if let rawMax = item["device_max_speed"] as? String {
+                let g = BottleneckDiagnoser.parseSpeedGbps(rawMax)
+                return g > 0 ? g : nil
+            }
+            if let numMax = item["UsbDeviceMaxSpeedGbps"] as? Double, numMax > 0 {
+                return numMax
+            }
+            if let intMax = item["UsbDeviceMaxSpeedGbps"] as? Int, intMax > 0 {
+                return Double(intMax)
+            }
+            return nil
+        }()
+
+        if bcd == nil && devClass == nil && ifaceClasses.isEmpty && !hasQualifier && !usb3Pref && !bbFailed && exactMax == nil {
+            return nil
+        }
+        return DeviceCapabilityDescriptor(
+            bcdUSB: bcd,
+            usbDeviceClass: devClass,
+            usbInterfaceClasses: ifaceClasses,
+            hasDeviceQualifier: hasQualifier,
+            usb3PreferredOrRequired: usb3Pref,
+            billboardAltModeFailed: bbFailed,
+            exactMaxSpeedGbps: exactMax
+        )
+    }
+
+    private static func parseFlexibleInt(_ raw: Any?) -> Int? {
+        guard let raw else { return nil }
+        if let i = raw as? Int { return i }
+        if let n = raw as? NSNumber { return n.intValue }
+        if let s = raw as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if trimmed.hasPrefix("0x"), let hex = Int(trimmed.dropFirst(2), radix: 16) {
+                return hex
+            }
+            if let dec = Int(trimmed) {
+                return dec
+            }
+        }
+        return nil
+    }
+
+    private static func mergeDescriptors(
+        ioregCap: DeviceCapabilityDescriptor?,
+        inlineCap: DeviceCapabilityDescriptor?
+    ) -> DeviceCapabilityDescriptor? {
+        guard ioregCap != nil || inlineCap != nil else { return nil }
+        return DeviceCapabilityDescriptor(
+            bcdUSB: inlineCap?.bcdUSB ?? ioregCap?.bcdUSB,
+            usbDeviceClass: inlineCap?.usbDeviceClass ?? ioregCap?.usbDeviceClass,
+            usbInterfaceClasses: !(inlineCap?.usbInterfaceClasses.isEmpty ?? true)
+                ? (inlineCap?.usbInterfaceClasses ?? [])
+                : (ioregCap?.usbInterfaceClasses ?? []),
+            hasDeviceQualifier: (inlineCap?.hasDeviceQualifier == true) || (ioregCap?.hasDeviceQualifier == true),
+            usb3PreferredOrRequired: (inlineCap?.usb3PreferredOrRequired == true) || (ioregCap?.usb3PreferredOrRequired == true),
+            billboardAltModeFailed: (inlineCap?.billboardAltModeFailed == true) || (ioregCap?.billboardAltModeFailed == true),
+            exactMaxSpeedGbps: inlineCap?.exactMaxSpeedGbps ?? ioregCap?.exactMaxSpeedGbps,
+            minimumProvenSpeedGbps: inlineCap?.minimumProvenSpeedGbps ?? ioregCap?.minimumProvenSpeedGbps
+        )
+    }
+
     private static func walkUSBDevices(
         items: [[String: Any]],
         busTitle: String,
         controllerCeilingGbps: Double?,
+        ancestorPhysicalPort: String?,
+        ioregSnapshot: IORegistrySnapshot?,
         behindExternalHub: Bool,
+        upstreamHubGbps: Double? = nil,
         depth: Int,
         into out: inout [AttachedBusDevice]
     ) {
@@ -382,23 +573,38 @@ public enum BusProfilerCollector {
                 return "Unknown vendor"
             }()
 
+            let rawLocStr = (item["USBKeyLocationID"] as? String) ?? (item["location_id"] as? String)
+            let locUInt = IORegistrySnapshot.parseLocationID(rawLocStr)
+            let normalizedLocHex = locUInt.map { String(format: "0x%08x", $0) }
+            let ioregDev = locUInt.flatMap { ioregSnapshot?.usbDevicesByLocation[$0] }
+            let ioregHostPort = locUInt.flatMap { ioregSnapshot?.resolveUSBHostPort(for: $0) }
+
             let rawSpeed = (item["USBDeviceKeyLinkSpeed"] as? String)
                 ?? (item["link_speed"] as? String)
                 ?? (item["speed"] as? String)
                 ?? ""
-            let gbps = BottleneckDiagnoser.parseSpeedGbps(rawSpeed)
+            let parsedGbps = BottleneckDiagnoser.parseSpeedGbps(rawSpeed)
+            let gbps = parsedGbps > 0 ? parsedGbps : (ioregDev?.linkSpeedGbps ?? 0.0)
             let children = (item["_items"] as? [[String: Any]]) ?? []
-            let isBuiltIn = isBuiltInUSBNode(item)
-            let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty
+            let isBuiltIn = isBuiltInUSBNode(item) || (ioregDev?.isInternalPort == true)
+            let mergedCap = mergeDescriptors(ioregCap: ioregDev?.capability, inlineCap: extractInlineUSBDescriptor(item))
+            let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9)
+
+            let resolvedPhysicalPort = ioregDev?.hostPhysicalPortLabel
+                ?? ioregHostPort?.physicalPortLabel
+                ?? ancestorPhysicalPort
+            let effectivePortCeiling = controllerCeilingGbps
+                ?? ioregDev?.hostPortCeilingGbps
+                ?? ioregHostPort?.portCeilingGbps
 
             if !isHubContainer {
-                let eval = BottleneckDiagnoser.evaluateDevice(
-                    name: name,
-                    vendor: vendor,
+                let eval = BottleneckDiagnoser.evaluate(
                     protocolKind: .usbHost,
                     negotiatedGbps: gbps,
-                    portCeilingGbps: controllerCeilingGbps,
-                    behindHub: behindExternalHub
+                    portCeilingGbps: effectivePortCeiling,
+                    behindExternalHub: behindExternalHub,
+                    upstreamHubGbps: upstreamHubGbps,
+                    capability: mergedCap
                 )
                 out.append(
                     AttachedBusDevice(
@@ -406,13 +612,19 @@ public enum BusProfilerCollector {
                         name: name,
                         vendor: vendor,
                         busName: busTitle,
+                        physicalPort: resolvedPhysicalPort,
+                        locationID: normalizedLocHex,
                         protocolKind: .usbHost,
                         negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
                         negotiatedGbps: gbps,
-                        portCeilingGbps: controllerCeilingGbps,
+                        portCeilingGbps: effectivePortCeiling,
+                        deviceMaxGbps: eval.deviceMaxGbps,
+                        upstreamHubGbps: upstreamHubGbps,
                         depth: depth,
                         behindExternalHub: behindExternalHub,
                         modeDescription: behindExternalHub ? "via external USB hub" : "direct host bus",
+                        capability: mergedCap,
+                        bottleneckSegment: eval.bottleneckSegment,
                         verdict: eval.verdict,
                         diagnosticDetail: eval.detail
                     )
@@ -422,11 +634,22 @@ public enum BusProfilerCollector {
             if !children.isEmpty {
                 let childBehindExternalHub = behindExternalHub || !isBuiltIn
                 let childDepth = isBuiltIn ? depth : (depth + 1)
+                let childUpstreamHubGbps: Double? = {
+                    if isBuiltIn { return upstreamHubGbps }
+                    guard gbps > 0 else { return upstreamHubGbps }
+                    if let existing = upstreamHubGbps, existing > 0 {
+                        return min(existing, gbps)
+                    }
+                    return gbps
+                }()
                 walkUSBDevices(
                     items: children,
                     busTitle: busTitle,
                     controllerCeilingGbps: controllerCeilingGbps,
+                    ancestorPhysicalPort: resolvedPhysicalPort,
+                    ioregSnapshot: ioregSnapshot,
                     behindExternalHub: childBehindExternalHub,
+                    upstreamHubGbps: childUpstreamHubGbps,
                     depth: childDepth,
                     into: &out
                 )
