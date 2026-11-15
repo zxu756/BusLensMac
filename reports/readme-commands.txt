@@ -1,5 +1,5 @@
 === BusLens Mac README Command Replay & Honesty Gate ===
-Date (UTC): 2026-11-15T04:59:57Z
+Date (UTC): 2026-11-15T20:04:03Z
 App Binary: <REPO_ROOT>/build/BusLensMac.app/Contents/MacOS/BusLensMac
 
 [PASS] Documentation honesty & Unreleased (after v0.2.0) disclosures verified in README.md, README.zh-CN.md, and docs/SPEC.md
@@ -14,10 +14,10 @@ App Binary: <REPO_ROOT>/build/BusLensMac.app/Contents/MacOS/BusLensMac
 [SKIP] [README.md #08] `open build/BusLensMac.app` -> reason: launches macOS GUI window; skipped to enforce zero-GUI headless test policy
 [PASS] [README.md #09] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang en` -> rc=0 (Power: AC Line Power (Low Power Mode: No) | Peak Negotiated Link: 40 Gb/s)
 [PASS] [README.md #10] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang zh` -> rc=0 (供电状态：交流电源（低电量模式：否） | 最高协商链路：40 Gb/s)
-[PASS] [README.md #11] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang en` -> rc=0 (JSON valid (language=en, isDemo=false, devices=2))
-[PASS] [README.md #12] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang zh` -> rc=0 (JSON valid (language=zh-Hans, isDemo=false, devices=2))
-[PASS] [README.md #13] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang en` -> rc=0 (No throttled links detected (2 attached device(s), 0 indeterminate).)
-[PASS] [README.md #14] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang zh` -> rc=0 (未检测到被限速链路（共连接 2 台设备，其中 0 台无法判断上限）。)
+[PASS] [README.md #11] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang en` -> rc=0 (JSON valid (language=en, isDemo=false, devices=3))
+[PASS] [README.md #12] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang zh` -> rc=0 (JSON valid (language=zh-Hans, isDemo=false, devices=3))
+[PASS] [README.md #13] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang en` -> rc=0 (No throttled links detected (3 attached device(s), 0 indeterminate).)
+[PASS] [README.md #14] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang zh` -> rc=0 (未检测到被限速链路（共连接 3 台设备，其中 0 台无法判断上限）。)
 [PASS] [README.md #15] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang en` -> rc=0 (Verified Port-USB-C@2 + Port-USB-C@6 + HID peripheral)
 [PASS] [README.md #16] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang zh` -> rc=0 (Verified Port-USB-C@2 + Port-USB-C@6 + HID / 低速外设)
 [PASS] [README.md #17] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang en` -> rc=0 (Verified TBU405Pro + Indeterminate (without ioreg))
@@ -39,10 +39,10 @@ App Binary: <REPO_ROOT>/build/BusLensMac.app/Contents/MacOS/BusLensMac
 [SKIP] [README.zh-CN.md #08] `open build/BusLensMac.app` -> reason: launches macOS GUI window; skipped to enforce zero-GUI headless test policy
 [PASS] [README.zh-CN.md #09] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang en` -> rc=0 (Power: AC Line Power (Low Power Mode: No) | Peak Negotiated Link: 40 Gb/s)
 [PASS] [README.zh-CN.md #10] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --lang zh` -> rc=0 (供电状态：交流电源（低电量模式：否） | 最高协商链路：40 Gb/s)
-[PASS] [README.zh-CN.md #11] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang en` -> rc=0 (JSON valid (language=en, isDemo=false, devices=2))
-[PASS] [README.zh-CN.md #12] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang zh` -> rc=0 (JSON valid (language=zh-Hans, isDemo=false, devices=2))
-[PASS] [README.zh-CN.md #13] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang en` -> rc=0 (No throttled links detected (2 attached device(s), 0 indeterminate).)
-[PASS] [README.zh-CN.md #14] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang zh` -> rc=0 (未检测到被限速链路（共连接 2 台设备，其中 0 台无法判断上限）。)
+[PASS] [README.zh-CN.md #11] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang en` -> rc=0 (JSON valid (language=en, isDemo=false, devices=3))
+[PASS] [README.zh-CN.md #12] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --json --lang zh` -> rc=0 (JSON valid (language=zh-Hans, isDemo=false, devices=3))
+[PASS] [README.zh-CN.md #13] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang en` -> rc=0 (No throttled links detected (3 attached device(s), 0 indeterminate).)
+[PASS] [README.zh-CN.md #14] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli bottlenecks --lang zh` -> rc=0 (未检测到被限速链路（共连接 3 台设备，其中 0 台无法判断上限）。)
 [PASS] [README.zh-CN.md #15] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang en` -> rc=0 (Verified Port-USB-C@2 + Port-USB-C@6 + HID peripheral)
 [PASS] [README.zh-CN.md #16] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_sp_scrubbed.json --ioreg-input Tests/BusLensMacTests/Fixtures/host_macmini_20261115_ioreg_scrubbed.plist --lang zh` -> rc=0 (Verified Port-USB-C@2 + Port-USB-C@6 + HID / 低速外设)
 [PASS] [README.zh-CN.md #17] `build/BusLensMac.app/Contents/MacOS/BusLensMac --cli topology --input Tests/BusLensMacTests/Fixtures/host_macmini_scrubbed.json --lang en` -> rc=0 (Verified TBU405Pro + Indeterminate (without ioreg))

@@ -1,9 +1,9 @@
 === BusLens Mac M1 Differential & Capability Gate ===
-Date (UTC): 2026-11-15T04:59:23Z
+Date (UTC): 2026-11-15T20:03:25Z
 Host: macOS 27.0.1 (26A434) arm64
 Binary: <REPO_ROOT>/.build/out/Products/Debug/BusLensMac
 
-[PASS] Row 1 (Live differential oracle vs system_profiler + ioreg in EN & ZH): devices=2 (TB@Port-USB-C@2=40Gbps, USB@Port-USB-C@6=0.012Gbps), 100% match on count/speed/port, 0 leaks across 22 live identifiers
+[PASS] Row 1 (Live same-source check vs system_profiler + ioreg in EN & ZH): devices=3 (TB@Port-USB-C@2=40Gbps, USB@Port-USB-C@6=0.012Gbps, USB@Port-USB-C@5=0.48Gbps) — checked only external device count, negotiated speeds, and port labels (0 throttled devices; no throttling verified; 只核对了外接设备数、协商速率与端口标签，未验证限速判断); reference script and product read the same ioreg keys (AppleUSBHostPort UsbIOPort/PortNumber/bDeviceClass/USBPortType/UsbLinkSpeed & IOThunderboltSwitch Router ID/Socket ID; 参照与产品读的是同一批 ioreg 键，对端口映射与集线器过滤属同源对照), 0 leaks across 23 live identifiers
 [SKIP] Row 2 (Real hardware enclosure w/ charging-only cable): 没跑 (requires human cable-swapping)
 [SKIP] Row 3 (Real hardware enclosure w/ stock cable): 没跑 (requires human cable-swapping)
 [PASS] Paired 2026-11-15 scrubbed Mac mini fixture (system_profiler + ioreg): verified capture headers, 0 leaks, and Port-USB-C@2 / Port-USB-C@6 mapping
@@ -12,10 +12,11 @@ Binary: <REPO_ROOT>/.build/out/Products/Debug/BusLensMac
 [PASS] U14: 12 Mb/s Mass Storage (bInterfaceClass=8) is diagnosed Throttled (never HID peripheral); verified HID (class=3) gets HID peripheral / HID / 低速外设
 [PASS] Row 5: Zero storage or peripheral keyword guesses in Sources/ (`t7|extreme pro` = 0, `wooting|keychron|logitech|ajazz` = 0)
 [PASS] Row 6: Legacy SPUSBDataType (macOS 14-15) and Thunderbolt 5 (80 Gb/s) explicitly marked Unverified / 尚未在真机上验证 in README.md, README.zh-CN.md, and docs/SPEC.md
-[PASS] W1 M1_bcdUSB (disable bcdUSB == 0x0210 SuperSpeed-on-USB2 capability check) -> compiled & killed by `DiagnoserTests/testM1SixteenSyntheticScenariosWithIORegistryDescriptors` (rc=1, 18.30s)
-[PASS] W1 M2_U13_class9 (hide any USB device with _items regardless of bDeviceClass == 9) -> compiled & killed by `CollectorTests/testU13NonHubClassDockWithChildRemainsVisible` (rc=1, 3.39s)
-[PASS] W1 M3_U14_hidClass3 (blanket-label all <= 12 Mb/s devices as HID peripheral ignoring bInterfaceClass == 8) -> compiled & killed by `DiagnoserTests/testU14TwelveMbpsMassStorageIsNeverLabeledLowSpeedPeripheral` (rc=1, 3.06s)
-[PASS] W1 M4_U5_portMapping (drop locationID -> AppleUSBHostPort physical port mapping) -> compiled & killed by `CollectorTests/testM1Real20261115PairedFixtureAndPhysicalPortMapping` (rc=1, 3.21s)
+[PASS] W1 M1_bcdUSB (disable bcdUSB == 0x0210 SuperSpeed-on-USB2 capability check) -> compiled & killed by `DiagnoserTests/testM1SixteenSyntheticScenariosWithIORegistryDescriptors` (rc=1, 25.09s)
+[PASS] W1 M2_U13_class9 (hide any USB device with _items regardless of bDeviceClass == 9) -> compiled & killed by `CollectorTests/testU13NonHubClassDockWithChildRemainsVisible` (rc=1, 2.24s)
+[PASS] W1 M3_U14_hidClass3 (blanket-label all <= 12 Mb/s devices as HID peripheral ignoring bInterfaceClass == 8) -> compiled & killed by `DiagnoserTests/testU14TwelveMbpsMassStorageIsNeverLabeledLowSpeedPeripheral` (rc=1, 2.49s)
+[PASS] W1 M4_U5_portMapping (drop locationID -> AppleUSBHostPort physical port mapping) -> compiled & killed by `CollectorTests/testM1Real20261115PairedFixtureAndPhysicalPortMapping` (rc=1, 2.22s)
+[PASS] W1 M5_UR4_usbIOPort (remove UsbIOPort property read to verify PortNumber never synthesizes Port-USB-C@N) -> compiled & killed by `CollectorTests/testUR4MissingUsbIOPortReportsUnknownAndDistinguishesReadFromPortNumberConcat` (rc=1, 2.20s)
 
-M1_SUMMARY: passed=11 failed=0 skipped=2
+M1_SUMMARY: passed=12 failed=0 skipped=2
 === M1 DIFFERENTIAL, CAPABILITY, U13/U14 & MUTATION GATE PASSED (2 REAL-CABLE ROWS SKIPPED: 没跑) ===
