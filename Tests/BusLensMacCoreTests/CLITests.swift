@@ -831,4 +831,14 @@ struct CLITests {
         #expect(!BusDashboardView.physicalPortModuleSubtitle(for: snapExplicitOnly.controllers[0], localizer: zhLoc).contains("推断"))
         #expect(!BusMenuBarView.statusBadgeText(for: hostSnap, localizer: zhLoc).contains("推断"))
     }
+
+    @Test("S4 Item 5: README.zh-CN.md and docs/SPEC.md have clean single parentheses on unverified rows without nested '（尚未在真机上验证（仅合成样本测试））'")
+    func testS4ChineseReadmeAndSpecHaveNoNestedUnverifiedParentheses() throws {
+        let readmeZh = try String(contentsOf: Self.repoRootURL.appendingPathComponent("README.zh-CN.md"), encoding: .utf8)
+        let specMd = try String(contentsOf: Self.repoRootURL.appendingPathComponent("docs/SPEC.md"), encoding: .utf8)
+
+        #expect(!readmeZh.contains("（尚未在真机上验证（仅合成样本测试））"))
+        #expect(!specMd.contains("（尚未在真机上验证（仅合成样本测试））"))
+        #expect(readmeZh.contains("**未在真机验证（仅合成样本测试）**"))
+    }
 }
