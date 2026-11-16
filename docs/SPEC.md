@@ -18,6 +18,7 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
   - **Verified on real hardware**: Only external device enumeration count (`3` attached devices) and negotiated link speeds (`40 Gb/s`, `480 Mb/s`, `12 Mb/s`; `0` throttled devices) on `1` machine (Apple Silicon Mac mini, macOS 27.0.1 arm64).
   - **Link throttling & bottleneck segment judgment (`Throttled` / `bcdUSB` inference, charging-only cables & external USB 2.0 hub throttling)**: *Unverified on real hardware (synthetic fixtures only) / 未在真机验证（尚未在真机上验证（仅合成样本测试））*.
   - **macOS 14–15 legacy `SPUSBDataType` schema**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
+  - **Retained legacy & AC charger keys (`location_id`, `vendor_id`, `Built-in_Device`, `device_speed`, `serial_num`, `sppower_ac_charger_watts`)**: *Key names sourced from public legacy-format samples (`Built-in_Device` from XML; JSON key name unconfirmed) or macOS built-in SystemProfiler string tables; not verified on the author's machine / 键名来自旧格式的公开样本或系统自带的字符串表，没有在作者的机器上验证*.
   - **Thunderbolt 5 (`80 Gb/s` / `120 Gb/s`)**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
 
 ---
@@ -27,7 +28,7 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
 - **Zero Root Privileges & Read-Only Inspection**: Uses user-space read-only `/usr/sbin/system_profiler`, `/usr/sbin/ioreg -a -r -c AppleUSBHostPort -l`, `/usr/sbin/ioreg -a -r -c IOThunderboltSwitch -l`, and `/usr/bin/pmset -g` without `sudo`, DriverKit, or opening `IOUSBHostDevice` user clients.
 - **Zero Network Access**: Offline pure-SwiftPM (`macOS 14.0+`, `arm64`) executable.
 - **Zero Preferences Side Effects in Headless / Test Runs**: CLI invocations exit via `Darwin.exit` before `NSApplication` / AppKit starts; unit tests inject `InMemoryPreferenceStore` so `~/Library/Preferences` is never modified.
-- **Automatic Hardware Identifier Redaction**: Serial numbers (`serial_num`, `device_serial`, `USBDeviceKeySerialNumber`, `kUSBSerialNumberString`, `USB Serial Number`) and UUIDs/UIDs (`domain_uuid_key`, `switch_uid_key`, `uid_key`, `kUSBContainerID`, `Device GUID`, `Switch UID`, `Domain UUID`) are scrubbed while preserving link speed and topology tags (`receptacle_upstream_ambiguous_tag`, `locationID`, `UsbIOPort`).
+- **Automatic Hardware Identifier Redaction**: Serial numbers (`serial_num`, `USBDeviceKeySerialNumber`, `kUSBSerialNumberString`, `USB Serial Number`) and UUIDs/UIDs (`domain_uuid_key`, `switch_uid_key`, `uid_key`, `kUSBContainerID`, `Device GUID`, `Switch UID`, `Domain UUID`) are scrubbed while preserving link speed and topology tags (`receptacle_upstream_ambiguous_tag`, `locationID`, `UsbIOPort`).
 
 ---
 

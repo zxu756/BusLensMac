@@ -62,7 +62,6 @@ EXACT_REMOVED_KEYS: frozenset[str] = frozenset(
         "UsbExclusiveOwner",
         "UserPreferences",
         "bluetooth-dev-addr",
-        "device_serial",
         "die-id",
         "domain_uuid_key",
         "iSerialNumber",

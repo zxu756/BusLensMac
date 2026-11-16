@@ -96,7 +96,7 @@ struct DiagnoserTests {
         }
     }
 
-    @Test("U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', and 'Wooting 60HE' on 10 Gb/s bus are Indeterminate; only verified HID class 3 at 1.5/12 Mb/s is HID peripheral")
+    @Test("U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', and 'Wooting 60HE' without descriptors are Indeterminate; only verified HID class 3 at 1.5/12 Mb/s is HID peripheral")
     @MainActor
     func testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps() throws {
         let json = """
@@ -104,33 +104,32 @@ struct DiagnoserTests {
           "SPUSBDataType": [
             {
               "_name": "USB 3.1 Bus",
-              "host_controller_speed": "Up to 10 Gb/s",
               "_items": [
                 {
                   "_name": "Groups Backup Drive",
                   "manufacturer": "Acme Storage",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "Hidden Disk",
                   "manufacturer": "Acme Storage",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "Wooting 60HE",
                   "manufacturer": "Wooting",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "USB 1.0 HID Keypad",
                   "manufacturer": "Generic",
-                  "speed": "Up to 1.5 Mb/s",
+                  "device_speed": "low_speed",
                   "bInterfaceClass": 3
                 },
                 {
                   "_name": "USB 1.1 Unclassified Device",
                   "manufacturer": "Generic",
-                  "speed": "Up to 12 Mb/s"
+                  "device_speed": "full_speed"
                 }
               ]
             }
@@ -146,7 +145,7 @@ struct DiagnoserTests {
         for name in ["Groups Backup Drive", "Hidden Disk", "Wooting 60HE"] {
             let dev = try #require(snap.devices.first { $0.name == name })
             #expect(dev.negotiatedSpeedLabel == "480 Mb/s")
-            #expect(dev.portCeilingGbps == 10.0)
+            #expect(dev.portCeilingGbps == nil)
             #expect(dev.verdict == .indeterminate)
             #expect(dev.verdict.localizedLabel(en) == "Indeterminate")
             #expect(dev.verdict.localizedLabel(zh) == "无法判断是否被限速")
@@ -666,10 +665,10 @@ struct DiagnoserTests {
                 ("Elements SE", 5.0, .indeterminate),
             ]),
             ("e1_empty", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus"}],"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"Up to 40 Gb/s","receptacle_status_key":"receptacle_no_devices_connected"}}],"SPPowerDataType":[]}"#, []),
-            ("l1_legacy_nvme_480", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"NVMe Enclosure","manufacturer":"Acme","speed":"Up to 480 Mb/s","serial_num":"LEGACYSER1","vendor_id":"0x1234"}]}]}"#, [
+            ("l1_legacy_nvme_480", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"NVMe Enclosure","manufacturer":"Acme","device_speed":"high_speed","serial_num":"LEGACYSER1","vendor_id":"0x1234"}]}]}"#, [
                 ("NVMe Enclosure", 0.48, .indeterminate)
             ]),
-            ("l2_legacy_nvme_10G_hub_kb", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"4-Port USB 3.0 Hub","bDeviceClass":9,"speed":"Up to 5 Gb/s","_items":[{"_name":"Portable SSD","manufacturer":"Acme","speed":"Up to 10 Gb/s"},{"_name":"Apple Keyboard","speed":"Up to 12 Mb/s"}]}]}]}"#, [
+            ("l2_legacy_nvme_10G_hub_kb", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"4-Port USB 3.0 Hub","bDeviceClass":9,"device_speed":"super_speed","_items":[{"_name":"Portable SSD","manufacturer":"Acme","device_speed":"super_speed_plus"},{"_name":"Apple Keyboard","device_speed":"full_speed"}]}]}]}"#, [
                 ("Portable SSD", 10.0, .indeterminate),
                 ("Apple Keyboard", 0.012, .indeterminate),
             ]),

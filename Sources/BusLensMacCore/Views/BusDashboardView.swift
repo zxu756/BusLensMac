@@ -494,7 +494,7 @@ public struct BusDashboardView: View {
             // Negotiated Speed + Segmented Lane Gauge
             VStack(alignment: .trailing, spacing: 4) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(verbatim: dev.negotiatedSpeedLabel)
+                    Text(verbatim: dev.localizedNegotiatedSpeedLabel(localizer))
                         .font(.system(size: 14, weight: .bold, design: .monospaced))
                         .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
                     Text(verbatim: "/ \(dev.localizedPortCeilingLabel(localizer))")

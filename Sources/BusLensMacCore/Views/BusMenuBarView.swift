@@ -123,7 +123,7 @@ public struct BusMenuBarView: View {
                         }
                         Spacer(minLength: 6)
                         VStack(alignment: .trailing, spacing: 1) {
-                            Text(verbatim: dev.negotiatedSpeedLabel)
+                            Text(verbatim: dev.localizedNegotiatedSpeedLabel(localizer))
                                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
                                 .fixedSize(horizontal: true, vertical: false)

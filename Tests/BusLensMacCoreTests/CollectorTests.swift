@@ -264,12 +264,12 @@ struct CollectorTests {
                 {
                   "_name": "USB 2.0 Hub",
                   "Built-in_Device": "Yes",
-                  "speed": "Up to 480 Mb/sec",
+                  "device_speed": "high_speed",
                   "_items": [
                     {
                       "_name": "NVMe Enclosure",
                       "manufacturer": "Acme",
-                      "speed": "Up to 480 Mb/s",
+                      "device_speed": "high_speed",
                       "serial_num": "LEGACY-SECRET-SERIAL-01",
                       "vendor_id": "0x1234"
                     }
@@ -278,16 +278,16 @@ struct CollectorTests {
                 {
                   "_name": "4-Port USB 3.0 Hub",
                   "bDeviceClass": 9,
-                  "speed": "Up to 5 Gb/s",
+                  "device_speed": "super_speed",
                   "_items": [
                     {
                       "_name": "Portable SSD",
                       "manufacturer": "Acme",
-                      "speed": "Up to 10 Gb/s"
+                      "device_speed": "super_speed_plus"
                     },
                     {
                       "_name": "Apple Keyboard",
-                      "speed": "Up to 12 Mb/s"
+                      "device_speed": "full_speed"
                     }
                   ]
                 }
@@ -331,28 +331,27 @@ struct CollectorTests {
           "SPUSBDataType": [
             {
               "_name": "USB 3.1 Bus",
-              "host_controller_speed": "Up to 10 Gb/s",
               "_items": [
                 {
                   "_name": "Hubble Backup Drive",
                   "manufacturer": "Acme Storage",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "Generic 4-Port Hub",
                   "manufacturer": "Generic",
-                  "speed": "Up to 5 Gb/s"
+                  "device_speed": "super_speed"
                 },
                 {
                   "_name": "Anker USB-C Adapter",
                   "bDeviceClass": 9,
                   "manufacturer": "Anker",
-                  "speed": "Up to 5 Gb/s",
+                  "device_speed": "super_speed",
                   "_items": [
                     {
                       "_name": "Downstream Flash Drive",
                       "manufacturer": "Acme",
-                      "speed": "Up to 480 Mb/s"
+                      "device_speed": "high_speed"
                     }
                   ]
                 }
@@ -382,13 +381,12 @@ struct CollectorTests {
         #expect(zhText.contains("Hubble Backup Drive"))
     }
 
-    @Test("U8: Low Power Mode accepts string ('Yes', '1', 'true', 'sppower_low_power_mode_enabled'), integer 1, and pmset fallback")
+    @Test("U8: Low Power Mode accepts string ('Yes', '1', 'true'), integer 1, and pmset fallback")
     func testLowPowerModeStringIntegerAndPmsetParsing() {
         let samples: [(String, Bool)] = [
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":"Yes"}}]}"#, true),
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":"1"}}]}"#, true),
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":"true"}}]}"#, true),
-            (#"{"SPPowerDataType":[{"sppower_low_power_mode":"sppower_low_power_mode_enabled"}]}"#, true),
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":1}}]}"#, true),
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":"No"}}]}"#, false),
             (#"{"SPPowerDataType":[{"AC Power":{"Current Power Source":"TRUE","LowPowerMode":"0"}}]}"#, false),
@@ -1116,5 +1114,168 @@ struct CollectorTests {
         #expect(textZh.contains("[端口：未知]"))
         #expect(textZh.contains("[Port-USB-C@7]"))
         #expect(textZh.contains("[Rear-Slot-A]"))
+    }
+
+    @Test("S4 Item 1: Removes unverified/misspelled system_profiler keys, parses legacy SPUSBDataType device_speed tokens with Unknown fallback, and documents retained keys in READMEs")
+    @MainActor
+    func testS4TwentyKeysAuditLegacyDeviceSpeedAndReadmeTable() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        // 1. Deleted / misspelled keys must have zero effect on ceilings, hub hiding, descriptors, speed, or power
+        let deletedKeysJSON = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "max_speed_key": "40 Gb/s",
+                "maximum_speed_key": "80 Gb/s",
+                "current_speed_key": "20 Gb/s",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBTestDrive",
+                  "device_name_key": "TBTestDrive",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "usb4"
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "host_controller_speed": "Up to 10 Gb/s",
+              "max_speed": "Up to 20 Gb/s",
+              "_items": [
+                {
+                  "_name": "NotBuiltInOrClass9Container",
+                  "built_in": "Yes",
+                  "USBDeviceKeyDeviceClass": 9,
+                  "device_class": 9,
+                  "interface_class": 3,
+                  "bInterfaceClasses": [3],
+                  "link_speed": "10 Gb/s",
+                  "speed": "Up to 480 Mb/s",
+                  "_items": [
+                    {
+                      "_name": "RealSpeedChild",
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
+                      "bInterfaceClass": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "SPPowerDataType": [
+            {
+              "sppower_low_power_mode": "Yes",
+              "lowpowermode": "1",
+              "Battery Power": {
+                "Current Power Source": "TRUE",
+                "LowPowerMode": "Yes"
+              }
+            }
+          ]
+        }
+        """
+        let snapDeleted = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(deletedKeysJSON.utf8))
+        let tbCtrl = try #require(snapDeleted.controllers.first { $0.protocolKind == .thunderboltUSB4 })
+        let usbCtrl = try #require(snapDeleted.controllers.first { $0.protocolKind == .usbHost })
+        #expect(tbCtrl.maxGbps == nil)
+        #expect(usbCtrl.maxGbps == nil)
+
+        // NotBuiltInOrClass9Container must NOT be hidden as built_in or class-9 hub, must NOT get class 3, and must have Unknown speed
+        let parentDev = try #require(snapDeleted.devices.first { $0.name == "NotBuiltInOrClass9Container" })
+        #expect(parentDev.negotiatedGbps == 0.0)
+        #expect(parentDev.portCeilingGbps == nil)
+        #expect(parentDev.capability == nil)
+        #expect(parentDev.verdict == .indeterminate)
+
+        let childDev = try #require(snapDeleted.devices.first { $0.name == "RealSpeedChild" })
+        #expect(childDev.negotiatedGbps == 5.0)
+        #expect(childDev.behindExternalHub == true)
+        #expect(childDev.capability?.usbInterfaceClasses == [3])
+
+        #expect(snapDeleted.power.powerSource == nil)
+        #expect(snapDeleted.power.lowPowerMode == nil)
+
+        // 2. Legacy SPUSBDataType device_speed tokens and unparseable -> Unknown / 未知 (never Idle)
+        let legacySpeedsJSON = """
+        {
+          "SPUSBDataType": [
+            {
+              "_name": "USB31Bus",
+              "location_id": "0x01000000",
+              "_items": [
+                { "_name": "BuiltInHub", "Built-in_Device": "Yes", "device_speed": "high_speed", "_items": [
+                  { "_name": "DevLow", "vendor_id": "0x1234", "location_id": "0x01110000 / 1", "device_speed": "low_speed" },
+                  { "_name": "DevFull", "device_speed": "full_speed" },
+                  { "_name": "DevHigh", "device_speed": "high_speed" },
+                  { "_name": "DevSuper", "device_speed": "super_speed" },
+                  { "_name": "DevSuperPlus", "device_speed": "super_speed_plus" },
+                  { "_name": "DevSuperPlusX2", "device_speed": "super_speed_plus_x2" },
+                  { "_name": "DevUnparseable", "device_speed": "proprietary_unknown_mode" }
+                ]}
+              ]
+            }
+          ],
+          "SPPowerDataType": [
+            { "sppower_ac_charger_watts": "96", "AC Power": { "Current Power Source": "TRUE", "LowPowerMode": "No" } }
+          ]
+        }
+        """
+        let snapLegacy = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(legacySpeedsJSON.utf8))
+        let legacyByName = Dictionary(uniqueKeysWithValues: snapLegacy.devices.map { ($0.name, $0) })
+        #expect(legacyByName["BuiltInHub"] == nil)
+        #expect(legacyByName["DevLow"]?.negotiatedSpeedLabel == "1.5 Mb/s")
+        #expect(legacyByName["DevLow"]?.vendor == "VID 0x1234")
+        #expect(legacyByName["DevLow"]?.locationID == "0x01110000")
+        #expect(legacyByName["DevFull"]?.negotiatedSpeedLabel == "12 Mb/s")
+        #expect(legacyByName["DevHigh"]?.negotiatedSpeedLabel == "480 Mb/s")
+        #expect(legacyByName["DevSuper"]?.negotiatedSpeedLabel == "5 Gb/s")
+        #expect(legacyByName["DevSuperPlus"]?.negotiatedSpeedLabel == "10 Gb/s")
+        #expect(legacyByName["DevSuperPlusX2"]?.negotiatedSpeedLabel == "20 Gb/s")
+
+        let unparseable = try #require(legacyByName["DevUnparseable"])
+        #expect(unparseable.negotiatedGbps == 0.0)
+        #expect(unparseable.negotiatedSpeedLabel == "Unknown")
+        #expect(snapLegacy.power.negotiatedWatts == 96)
+        #expect(snapLegacy.power.powerSource == "AC Line Power")
+        #expect(snapLegacy.power.lowPowerMode == false)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let jsonEn = try BusCLIRunner.renderTopologyJSON(snapshot: snapLegacy, localizer: en, isDemo: false)
+        let jsonZh = try BusCLIRunner.renderTopologyJSON(snapshot: snapLegacy, localizer: zh, isDemo: false)
+        let payloadEn = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(jsonEn.utf8))
+        let payloadZh = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(jsonZh.utf8))
+        let unparseableEn = try #require(payloadEn.devices.first { $0.name == "DevUnparseable" })
+        let unparseableZh = try #require(payloadZh.devices.first { $0.name == "DevUnparseable" })
+        #expect(unparseableEn.negotiatedSpeedLabel == "Unknown")
+        #expect(unparseableZh.negotiatedSpeedLabel == "未知")
+
+        let textEn = BusCLIRunner.renderTopologyText(snapshot: snapLegacy, localizer: en, isDemo: false)
+        let textZh = BusCLIRunner.renderTopologyText(snapshot: snapLegacy, localizer: zh, isDemo: false)
+        #expect(!textEn.contains("Idle  [Indeterminate]  DevUnparseable"))
+        #expect(textEn.contains("Unknown"))
+        #expect(textZh.contains("未知"))
+
+        // 3. Both READMEs document the retained legacy/string-table keys as unverified on author's machine
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let readmeEn = try String(contentsOf: repoRoot.appendingPathComponent("README.md"), encoding: .utf8)
+        let readmeZh = try String(contentsOf: repoRoot.appendingPathComponent("README.zh-CN.md"), encoding: .utf8)
+        for key in ["location_id", "vendor_id", "Built-in_Device", "sppower_ac_charger_watts"] {
+            #expect(readmeEn.contains(key), "README.md verification table must mention \(key)")
+            #expect(readmeZh.contains(key), "README.zh-CN.md verification table must mention \(key)")
+        }
+        #expect(readmeZh.contains("没有在作者的机器上验证"))
+        #expect(readmeEn.lowercased().contains("not verified on the author's machine"))
     }
 }

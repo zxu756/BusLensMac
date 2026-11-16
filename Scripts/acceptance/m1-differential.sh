@@ -110,7 +110,6 @@ if len(current_user) >= 2:
 
 SECRET_EXACT_KEYS = {
     "serial_num",
-    "device_serial",
     "USBDeviceKeySerialNumber",
     "domain_uuid_key",
     "switch_uid_key",
@@ -264,6 +263,15 @@ usb_buses = sp_json.get("SPUSBHostDataType") or []
 if not usb_buses:
     usb_buses = sp_json.get("SPUSBDataType") or []
 
+LEGACY_DEVICE_SPEED_GBPS = {
+    "low_speed": 0.0015,
+    "full_speed": 0.012,
+    "high_speed": 0.48,
+    "super_speed": 5.0,
+    "super_speed_plus": 10.0,
+    "super_speed_plus_x2": 20.0,
+}
+
 def walk_sp_usb_items(items: list):
     for item in items:
         if not isinstance(item, dict):
@@ -282,7 +290,9 @@ def walk_sp_usb_items(items: list):
 
         children = item.get("_items") or []
         if not is_hub_container:
-            spd = parse_speed_gbps(item.get("USBDeviceKeyLinkSpeed") or item.get("speed"))
+            spd = parse_speed_gbps(item.get("USBDeviceKeyLinkSpeed"))
+            if spd <= 0 and isinstance(item.get("device_speed"), str):
+                spd = LEGACY_DEVICE_SPEED_GBPS.get(item["device_speed"].strip().lower(), 0.0)
             if spd <= 0 and loc is not None:
                 spd = usb_dev_speed_by_loc.get(loc, 0.0)
             phys_port = usb_dev_port_by_loc.get(loc) if loc is not None else None

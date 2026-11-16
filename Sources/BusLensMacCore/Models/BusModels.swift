@@ -225,6 +225,14 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     }
 
     @MainActor
+    public func localizedNegotiatedSpeedLabel(_ localizer: AppLocalizer) -> String {
+        guard negotiatedGbps > 0 else {
+            return localizer.L("Unknown", "未知")
+        }
+        return negotiatedSpeedLabel
+    }
+
+    @MainActor
     public func localizedPortCeilingLabel(_ localizer: AppLocalizer) -> String {
         BottleneckDiagnoser.formatCeilingGbps(portCeilingGbps, localizer: localizer)
     }

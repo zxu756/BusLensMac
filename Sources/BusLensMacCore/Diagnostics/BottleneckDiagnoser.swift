@@ -45,6 +45,28 @@ public enum BottleneckDiagnoser {
         return val / 1000.0
     }
 
+    /// Parses legacy `SPUSBDataType` `device_speed` enum tokens (sourced from public legacy samples and
+    /// macOS SystemProfiler USB speed string tables; unverified on the author's machine).
+    /// Returns 0.0 (rendered as Unknown / 未知) for any unrecognized value.
+    public static func parseLegacyUSBDeviceSpeedGbps(_ raw: String) -> Double {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "low_speed":
+            return 0.0015
+        case "full_speed":
+            return 0.012
+        case "high_speed":
+            return 0.48
+        case "super_speed":
+            return 5.0
+        case "super_speed_plus":
+            return 10.0
+        case "super_speed_plus_x2":
+            return 20.0
+        default:
+            return 0.0
+        }
+    }
+
     public static func formatSpeedGbps(_ gbps: Double) -> String {
         if gbps >= 1.0 {
             if gbps.truncatingRemainder(dividingBy: 1.0) == 0 {
@@ -72,7 +94,7 @@ public enum BottleneckDiagnoser {
         upstreamHubGbps: Double? = nil,
         capability: DeviceCapabilityDescriptor? = nil
     ) -> DeviceDiagnosticEvaluation {
-        let rate = formatSpeedGbps(negotiatedGbps)
+        let rate = negotiatedGbps > 0 ? formatSpeedGbps(negotiatedGbps) : "Unknown"
 
         switch protocolKind {
         case .thunderboltUSB4:
@@ -451,7 +473,7 @@ public enum BottleneckDiagnoser {
     }
 
     public static func chineseDiagnosticDetail(for device: AttachedBusDevice) -> String {
-        let rate = formatSpeedGbps(device.negotiatedGbps)
+        let rate = device.negotiatedGbps > 0 ? formatSpeedGbps(device.negotiatedGbps) : "未知"
         switch device.verdict {
         case .fullRate:
             return "实际速率 \(rate)（满速）。"

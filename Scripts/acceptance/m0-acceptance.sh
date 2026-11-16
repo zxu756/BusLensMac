@@ -87,7 +87,7 @@ try:
         if isinstance(obj, dict):
             for k, v in obj.items():
                 kl = k.lower()
-                if k in {"serial_num", "device_serial", "USBDeviceKeySerialNumber", "domain_uuid_key", "switch_uid_key", "kUSBSerialNumberString", "USB Serial Number", "Device GUID"} or "serial" in kl or "uuid" in kl or "uid_key" in kl or "switch uid" in kl:
+                if k in {"serial_num", "USBDeviceKeySerialNumber", "domain_uuid_key", "switch_uid_key", "kUSBSerialNumberString", "USB Serial Number", "Device GUID"} or "serial" in kl or "uuid" in kl or "uid_key" in kl or "switch uid" in kl:
                     if isinstance(v, str) and len(v.strip()) >= 4:
                         live_secrets.add(v.strip())
                 else:
@@ -281,14 +281,13 @@ with tempfile.TemporaryDirectory() as tmpdir:
     u9_path.write_text(json.dumps({
         "SPUSBDataType": [{
             "_name": "USB 3.1 Bus",
-            "host_controller_speed": "Up to 10 Gb/s",
             "_items": [
-                {"_name": "Groups Backup Drive", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
-                {"_name": "Hidden Disk", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"},
-                {"_name": "Wooting 60HE", "manufacturer": "Wooting", "speed": "Up to 480 Mb/s"},
-                {"_name": "Unclassified 12M Disk", "manufacturer": "Acme Storage", "speed": "Up to 12 Mb/s"},
-                {"_name": "USB 1.0 HID Device", "manufacturer": "Generic", "speed": "Up to 1.5 Mb/s", "bInterfaceClass": 3},
-                {"_name": "USB 1.1 HID Receiver", "manufacturer": "Generic", "speed": "Up to 12 Mb/s", "bInterfaceClass": 3}
+                {"_name": "Groups Backup Drive", "manufacturer": "Acme Storage", "device_speed": "high_speed"},
+                {"_name": "Hidden Disk", "manufacturer": "Acme Storage", "device_speed": "high_speed"},
+                {"_name": "Wooting 60HE", "manufacturer": "Wooting", "device_speed": "high_speed"},
+                {"_name": "Unclassified 12M Disk", "manufacturer": "Acme Storage", "device_speed": "full_speed"},
+                {"_name": "USB 1.0 HID Device", "manufacturer": "Generic", "device_speed": "low_speed", "bInterfaceClass": 3},
+                {"_name": "USB 1.1 HID Receiver", "manufacturer": "Generic", "device_speed": "full_speed", "bInterfaceClass": 3}
             ]
         }]
     }), encoding="utf-8")
@@ -323,9 +322,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     u10_path.write_text(json.dumps({
         "SPUSBDataType": [{
             "_name": "USB 3.1 Bus",
-            "host_controller_speed": "Up to 10 Gb/s",
             "_items": [
-                {"_name": "Hubble Backup Drive", "manufacturer": "Acme Storage", "speed": "Up to 480 Mb/s"}
+                {"_name": "Hubble Backup Drive", "manufacturer": "Acme Storage", "device_speed": "high_speed"}
             ]
         }]
     }), encoding="utf-8")
@@ -512,7 +510,7 @@ mutations = [
         "M3 (U3: fabricate 10 Gb/s USB controller ceiling when missing)",
         "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
         "private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {",
-        'private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {\n        if usbBus["host_controller_speed"] == nil { return 10.0 }',
+        "private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {\n        if !usbBus.isEmpty { return 10.0 }",
         "CollectorTests/testUnknownBusCeilingsAreNotFabricated",
         "U3: Unknown Thunderbolt and USB bus ceilings",
     ),
@@ -535,8 +533,8 @@ mutations = [
     (
         "M6 (U8: drop string 'yes' from Low Power Mode boolean parser)",
         "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
-        'case "1", "yes", "true", "on", "enabled", "sppower_low_power_mode_enabled":',
-        'case "1", "true", "on", "enabled", "sppower_low_power_mode_enabled":',
+        'case "1", "yes", "true", "on", "enabled":',
+        'case "1", "true", "on", "enabled":',
         "CollectorTests/testLowPowerModeStringIntegerAndPmsetParsing",
         "U8: Low Power Mode accepts string",
     ),

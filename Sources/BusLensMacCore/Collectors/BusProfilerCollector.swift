@@ -36,8 +36,8 @@ public enum BusCollectorError: Error, Equatable, Sendable {
 public enum BusProfilerCollector {
 
     private static let redactedKeys: Set<String> = [
+        // Legacy SPUSBDataType serial key from public samples (unverified on the author's machine; new SPUSBHostDataType uses USBDeviceKeySerialNumber).
         "serial_num",
-        "device_serial",
         "USBDeviceKeySerialNumber",
         "domain_uuid_key",
         "switch_uid_key"
@@ -292,10 +292,6 @@ public enum BusProfilerCollector {
 
     private static func explicitReceptacleCeilingGbps(in rec: [String: Any]?) -> Double? {
         guard let rec else { return nil }
-        if let maxRaw = (rec["max_speed_key"] as? String) ?? (rec["maximum_speed_key"] as? String) {
-            let val = BottleneckDiagnoser.parseSpeedGbps(maxRaw)
-            if val > 0 { return val }
-        }
         if let curRaw = rec["current_speed_key"] as? String,
            curRaw.lowercased().contains("up to") {
             let val = BottleneckDiagnoser.parseSpeedGbps(curRaw)
@@ -305,10 +301,7 @@ public enum BusProfilerCollector {
     }
 
     private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {
-        if let maxRaw = (usbBus["host_controller_speed"] as? String) ?? (usbBus["max_speed"] as? String) {
-            let val = BottleneckDiagnoser.parseSpeedGbps(maxRaw)
-            if val > 0 { return val }
-        }
+        _ = usbBus
         return nil
     }
 
@@ -318,6 +311,7 @@ public enum BusProfilerCollector {
         index: Int,
         duplicateCount: Int
     ) -> String {
+        // `location_id`: legacy SPUSBDataType key from public samples (e.g. "0x01140000 / 3"); unverified on the author's machine (new SPUSBHostDataType uses `USBKeyLocationID`).
         if let rawLoc = (usbBus["USBKeyLocationID"] as? String) ?? (usbBus["location_id"] as? String),
            let hexLoc = extractHexToken(from: rawLoc) {
             return "\(rawTitle) (\(hexLoc))"
@@ -401,7 +395,7 @@ public enum BusProfilerCollector {
                     physicalPort: physicalPort,
                     locationID: routeStr.map { "route:\($0)" },
                     protocolKind: .thunderboltUSB4,
-                    negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
+                    negotiatedSpeedLabel: gbps > 0 ? BottleneckDiagnoser.formatSpeedGbps(gbps) : "Unknown",
                     negotiatedGbps: gbps,
                     portCeilingGbps: ceilingGbps,
                     deviceMaxGbps: eval.deviceMaxGbps,
@@ -439,22 +433,21 @@ public enum BusProfilerCollector {
            hwType.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("Built-in") == .orderedSame {
             return true
         }
-        if parseBoolFlag(item["Built-in_Device"]) == true || parseBoolFlag(item["built_in"]) == true {
+        // `Built-in_Device`: legacy SPUSBDataType hub item key from public XML samples (value "Yes"); JSON key name unconfirmed and unverified on the author's machine.
+        if parseBoolFlag(item["Built-in_Device"]) == true {
             return true
         }
         return false
     }
 
     private static func isExplicitUSBHubClass(_ item: [String: Any]) -> Bool {
-        for key in ["bDeviceClass", "USBDeviceKeyDeviceClass", "device_class"] {
-            if let clsInt = item[key] as? Int, clsInt == 9 {
+        if let clsInt = item["bDeviceClass"] as? Int, clsInt == 9 {
+            return true
+        }
+        if let clsStr = item["bDeviceClass"] as? String {
+            let normalized = clsStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalized == "9" || normalized == "0x09" || normalized == "0x9" || normalized == "hub" {
                 return true
-            }
-            if let clsStr = item[key] as? String {
-                let normalized = clsStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if normalized == "9" || normalized == "0x09" || normalized == "0x9" || normalized == "hub" {
-                    return true
-                }
             }
         }
         return false
@@ -462,17 +455,10 @@ public enum BusProfilerCollector {
 
     private static func extractInlineUSBDescriptor(_ item: [String: Any]) -> DeviceCapabilityDescriptor? {
         let bcd = parseFlexibleInt(item["bcdUSB"])
-        let devClass = parseFlexibleInt(item["bDeviceClass"] ?? item["USBDeviceKeyDeviceClass"] ?? item["device_class"])
+        let devClass = parseFlexibleInt(item["bDeviceClass"])
         var ifaceClasses: [Int] = []
-        if let singleIface = parseFlexibleInt(item["bInterfaceClass"] ?? item["interface_class"]) {
+        if let singleIface = parseFlexibleInt(item["bInterfaceClass"]) {
             ifaceClasses.append(singleIface)
-        }
-        if let arr = item["bInterfaceClasses"] as? [Any] {
-            for elem in arr {
-                if let parsed = parseFlexibleInt(elem) {
-                    ifaceClasses.append(parsed)
-                }
-            }
         }
         if bcd == nil && devClass == nil && ifaceClasses.isEmpty {
             return nil
@@ -533,6 +519,7 @@ public enum BusProfilerCollector {
                    !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return v.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
+                // `vendor_id`: legacy SPUSBDataType key from public samples; unverified on the author's machine (new SPUSBHostDataType uses `USBDeviceKeyVendorID`).
                 if let vid = (item["USBDeviceKeyVendorID"] as? String) ?? (item["vendor_id"] as? String),
                    let hexVid = extractHexToken(from: vid) {
                     return "VID \(hexVid)"
@@ -540,17 +527,23 @@ public enum BusProfilerCollector {
                 return "Unknown vendor"
             }()
 
+            // `location_id`: legacy SPUSBDataType key from public samples (e.g. "0x01140000 / 3"); unverified on the author's machine (new SPUSBHostDataType uses `USBKeyLocationID`).
             let rawLocStr = (item["USBKeyLocationID"] as? String) ?? (item["location_id"] as? String)
             let locUInt = IORegistrySnapshot.parseLocationID(rawLocStr)
             let normalizedLocHex = locUInt.map { String(format: "0x%08x", $0) }
             let ioregDev = locUInt.flatMap { ioregSnapshot?.usbDevicesByLocation[$0] }
             let ioregHostPort = locUInt.flatMap { ioregSnapshot?.resolveUSBHostPort(for: $0) }
 
-            let rawSpeed = (item["USBDeviceKeyLinkSpeed"] as? String)
-                ?? (item["link_speed"] as? String)
-                ?? (item["speed"] as? String)
-                ?? ""
-            let parsedGbps = BottleneckDiagnoser.parseSpeedGbps(rawSpeed)
+            let parsedGbps: Double = {
+                if let hostSpeed = item["USBDeviceKeyLinkSpeed"] as? String {
+                    return BottleneckDiagnoser.parseSpeedGbps(hostSpeed)
+                }
+                // `device_speed`: legacy SPUSBDataType key from public samples (values such as `full_speed`, `high_speed`); unverified on the author's machine.
+                if let legacySpeed = item["device_speed"] as? String {
+                    return BottleneckDiagnoser.parseLegacyUSBDeviceSpeedGbps(legacySpeed)
+                }
+                return 0.0
+            }()
             let gbps = parsedGbps > 0 ? parsedGbps : (ioregDev?.linkSpeedGbps ?? 0.0)
             let children = (item["_items"] as? [[String: Any]]) ?? []
             let isBuiltIn = isBuiltInUSBNode(item) || (ioregDev?.isInternalPort == true)
@@ -582,7 +575,7 @@ public enum BusProfilerCollector {
                         physicalPort: resolvedPhysicalPort,
                         locationID: normalizedLocHex,
                         protocolKind: .usbHost,
-                        negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
+                        negotiatedSpeedLabel: gbps > 0 ? BottleneckDiagnoser.formatSpeedGbps(gbps) : "Unknown",
                         negotiatedGbps: gbps,
                         portCeilingGbps: effectivePortCeiling,
                         deviceMaxGbps: eval.deviceMaxGbps,
@@ -631,28 +624,15 @@ public enum BusProfilerCollector {
         var explicitLowPower: Bool?
 
         for entry in powerItems {
+            // `sppower_ac_charger_watts`: present in /System/Library/SystemProfiler/SPPowerReporter.spreporter string table (emitted only on Macs with AC charger information); unverified on the author's machine (absent on this Mac mini).
             if let w = entry["sppower_ac_charger_watts"] as? String, let parsed = Int(w.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 watts = parsed
             } else if let wInt = entry["sppower_ac_charger_watts"] as? Int {
                 watts = wInt
             }
 
-            for topKey in ["LowPowerMode", "sppower_low_power_mode", "lowpowermode"] {
-                if let parsed = parseBoolFlag(entry[topKey]) {
-                    explicitLowPower = parsed
-                }
-            }
-
-            if let battery = entry["Battery Power"] as? [String: Any] {
-                let isCurrent = parseBoolFlag(battery["Current Power Source"]) ?? false
-                if isCurrent {
-                    source = "Battery Power"
-                    if let parsed = extractLowPowerFlag(from: battery) {
-                        explicitLowPower = parsed
-                    }
-                } else if explicitLowPower == nil, let parsed = extractLowPowerFlag(from: battery) {
-                    explicitLowPower = parsed
-                }
+            if let parsed = parseBoolFlag(entry["LowPowerMode"]) {
+                explicitLowPower = parsed
             }
 
             if let ac = entry["AC Power"] as? [String: Any] {
@@ -693,12 +673,7 @@ public enum BusProfilerCollector {
     }
 
     private static func extractLowPowerFlag(from dict: [String: Any]) -> Bool? {
-        for key in ["LowPowerMode", "sppower_low_power_mode", "lowpowermode"] {
-            if let parsed = parseBoolFlag(dict[key]) {
-                return parsed
-            }
-        }
-        return nil
+        parseBoolFlag(dict["LowPowerMode"])
     }
 
     private static func parseBoolFlag(_ raw: Any?) -> Bool? {
@@ -712,9 +687,9 @@ public enum BusProfilerCollector {
         if let s = raw as? String {
             let lower = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             switch lower {
-            case "1", "yes", "true", "on", "enabled", "sppower_low_power_mode_enabled":
+            case "1", "yes", "true", "on", "enabled":
                 return true
-            case "0", "no", "false", "off", "disabled", "sppower_low_power_mode_disabled":
+            case "0", "no", "false", "off", "disabled":
                 return false
             default:
                 return nil

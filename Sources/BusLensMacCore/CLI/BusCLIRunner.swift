@@ -591,7 +591,7 @@ public enum BusCLIRunner {
                     locationID: dev.locationID,
                     protocolKind: dev.protocolKind.localizedTitle(localizer),
                     negotiatedGbps: dev.negotiatedGbps,
-                    negotiatedSpeedLabel: dev.negotiatedSpeedLabel,
+                    negotiatedSpeedLabel: dev.localizedNegotiatedSpeedLabel(localizer),
                     deviceMaxGbps: dev.deviceMaxGbps,
                     deviceMaxSpeedLabel: dev.localizedDeviceMaxLabel(localizer),
                     portCeilingGbps: dev.portCeilingGbps,
@@ -647,11 +647,11 @@ public enum BusCLIRunner {
             return lines.joined(separator: "\n") + "\n"
         }
 
-        let rateWidth = max(10, snapshot.devices.map { displayColumnWidth($0.negotiatedSpeedLabel) }.max() ?? 10)
+        let rateWidth = max(10, snapshot.devices.map { displayColumnWidth($0.localizedNegotiatedSpeedLabel(localizer)) }.max() ?? 10)
         let verdictWidth = max(16, snapshot.devices.map { displayColumnWidth($0.localizedVerdictLabel(localizer)) }.max() ?? 16)
 
         for dev in snapshot.devices {
-            let rate = padRightColumns(dev.negotiatedSpeedLabel, minColumns: rateWidth)
+            let rate = padRightColumns(dev.localizedNegotiatedSpeedLabel(localizer), minColumns: rateWidth)
             let state = padRightColumns(dev.localizedVerdictLabel(localizer), minColumns: verdictWidth)
             let ceiling = dev.localizedPortCeilingLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
@@ -708,9 +708,9 @@ public enum BusCLIRunner {
                 "检测到被限速链路：\(throttled.count) 条（含 \(inferredThrottledCount) 条推断）"
             ))
         }
-        let rateWidth = max(10, throttled.map { displayColumnWidth($0.negotiatedSpeedLabel) }.max() ?? 10)
+        let rateWidth = max(10, throttled.map { displayColumnWidth($0.localizedNegotiatedSpeedLabel(localizer)) }.max() ?? 10)
         for dev in throttled {
-            let rate = padRightColumns(dev.negotiatedSpeedLabel, minColumns: rateWidth)
+            let rate = padRightColumns(dev.localizedNegotiatedSpeedLabel(localizer), minColumns: rateWidth)
             let seg = dev.localizedBottleneckSegmentLabel(localizer) ?? dev.localizedVerdictLabel(localizer)
             let vendor = dev.localizedVendor(localizer)
             let portSuffix: String = {
