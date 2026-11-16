@@ -515,6 +515,7 @@ public enum BusProfilerCollector {
         for (idx, item) in items.enumerated() {
             let name = (item["_name"] as? String) ?? "USB Device"
             let vendor: String = {
+                // `manufacturer`: legacy SPUSBDataType key (0 hits in this host's system_profiler JSON; new SPUSBHostDataType uses `USBDeviceKeyVendorName`).
                 if let v = (item["USBDeviceKeyVendorName"] as? String) ?? (item["manufacturer"] as? String),
                    !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return v.trimmingCharacters(in: .whitespacesAndNewlines)

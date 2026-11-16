@@ -555,11 +555,18 @@ public struct IORegistrySnapshot: Equatable, Sendable {
     }
 
     private static func decodeThunderboltSupportedMaxGbps(portNode: [String: Any]) -> Double? {
-        guard let speedMask = parseInt(portNode["Supported Link Speed"]), speedMask > 0 else {
+        guard let speedMask = parseInt(portNode["Supported Link Speed"]), speedMask > 0,
+              let widthRaw = parseInt(portNode["Supported Link Width"]), widthRaw > 0 else {
             return nil
         }
-        let widthRaw = parseInt(portNode["Supported Link Width"]) ?? 2
-        let lanes: Double = (widthRaw >= 2) ? 2.0 : 1.0
+        let lanes: Double
+        if widthRaw == 1 {
+            lanes = 1.0
+        } else if widthRaw == 2 {
+            lanes = 2.0
+        } else {
+            return nil
+        }
 
         // Apple IOThunderboltPort Supported Link Speed bitmask:
         // 0x08 (8) = 10 Gb/s per lane (Gen 2 CIO), 0x04 (4) = 20 Gb/s per lane (Gen 3 CIO),

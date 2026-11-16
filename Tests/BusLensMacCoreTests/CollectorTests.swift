@@ -1278,4 +1278,92 @@ struct CollectorTests {
         #expect(readmeZh.contains("没有在作者的机器上验证"))
         #expect(readmeEn.lowercased().contains("not verified on the author's machine"))
     }
+
+    @Test("S4 Item 3: Missing Supported Link Width in IOThunderboltPort returns nil (Unknown / 未知) instead of defaulting to 2 lanes")
+    @MainActor
+    func testS4MissingSupportedLinkWidthReportsUnknownCeilingAndMaxSpeed() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBNoWidthDevice",
+                  "device_name_key": "TBNoWidthDevice",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        // Both host and device IOThunderboltPort have Supported Link Speed = 12, but omit Supported Link Width
+        let syntheticIOReg: [String: Any] = [
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType3",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "TBNoWidthDevice"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        #expect(ioregSnap.thunderboltBusesByRouter[0]?.portCeilingGbps == nil)
+        #expect(ioregSnap.thunderboltDevices.first?.capability.tbSupportedLinkGbps == nil)
+
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let ctrl = try #require(snap.controllers.first)
+        #expect(ctrl.maxGbps == nil)
+        #expect(ctrl.localizedMaxRateLabel(en) == "Unknown")
+        #expect(ctrl.localizedMaxRateLabel(zh) == "未知")
+
+        let dev = try #require(snap.devices.first)
+        #expect(dev.portCeilingGbps == nil)
+        #expect(dev.deviceMaxGbps == nil)
+        #expect(dev.localizedPortCeilingLabel(en) == "Unknown")
+        #expect(dev.localizedPortCeilingLabel(zh) == "未知")
+        #expect(dev.verdict == .indeterminate)
+    }
 }
