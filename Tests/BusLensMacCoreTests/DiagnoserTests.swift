@@ -1037,4 +1037,213 @@ struct DiagnoserTests {
         )
         #expect(provenHub.bottleneckSegment == .hub)
     }
+
+    @Test("S4 Item 4: Billboard max speed is not fabricated as 0.48, USB 2.0 protocol-constant port ceiling is marked inferred, and Thunderbolt cable-limited attribution is marked inferred")
+    @MainActor
+    func testS4BillboardUSB2CeilingAndThunderboltCableInferredTagging() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBCableInferredSSD",
+                  "device_name_key": "TBCableInferredSSD",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "2",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBPortDirectSSD",
+                  "device_name_key": "TBPortDirectSSD",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 2.0 Bus",
+              "USBKeyLocationID": "0x04000000",
+              "_items": [
+                {
+                  "_name": "BillboardAux12M",
+                  "USBKeyLocationID": "0x04110000",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB2PortDrive",
+                  "USBKeyLocationID": "0x04120000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x04100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-A@1",
+                    "UsbProtocol (2.0)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x04110000, "bcdUSB": 0x0201, "bDeviceClass": 17],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x04120000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                // Router 0: 40G host port + 40G device negotiated at 20G -> cable-limited attribution is inferred!
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOThunderboltSwitchType3", "Depth": 1, "Route String": 1, "Device Model Name": "TBCableInferredSSD"]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                // Router 1: 20G host port (Speed=8, Width=2) + 40G device negotiated at 20G -> port-limited directly from read registers (NOT inferred)
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 1,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "2",
+                            "Supported Link Speed": 8,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOThunderboltSwitchType3", "Depth": 1, "Route String": 1, "Device Model Name": "TBPortDirectSSD"]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        // 1. Billboard auxiliary device: no fabricated 0.48 deviceMaxGbps, verdict Normal (inferred) / 正常（推断）
+        let billboard = try #require(byName["BillboardAux12M"])
+        #expect(billboard.deviceMaxGbps == nil)
+        #expect(billboard.isInferred == true)
+        #expect(billboard.localizedVerdictLabel(en) == "Normal (inferred)")
+        #expect(billboard.localizedVerdictLabel(zh) == "正常（推断）")
+        #expect(billboard.localizedDiagnosticDetail(en).lowercased().contains("inferred"))
+        #expect(billboard.localizedDiagnosticDetail(zh).contains("推断"))
+
+        // 2. Pure USB 2.0 port ceiling from protocol constant: 480 Mb/s (inferred) / 480 Mb/s（推断）
+        let usb2Drive = try #require(byName["USB2PortDrive"])
+        #expect(usb2Drive.portCeilingGbps == 0.48)
+        #expect(usb2Drive.localizedPortCeilingLabel(en) == "480 Mb/s (inferred)")
+        #expect(usb2Drive.localizedPortCeilingLabel(zh) == "480 Mb/s（推断）")
+        let usbCtrl = try #require(snap.controllers.first { $0.protocolKind == .usbHost })
+        #expect(usbCtrl.localizedMaxRateLabel(en) == "480 Mb/s (inferred)")
+        #expect(usbCtrl.localizedMaxRateLabel(zh) == "480 Mb/s（推断）")
+
+        // 3. Thunderbolt cable-limited attribution: marked inferred across verdict, segment, detail, CLI, and GUI
+        let tbCable = try #require(byName["TBCableInferredSSD"])
+        #expect(tbCable.verdict == .throttled)
+        #expect(tbCable.bottleneckSegment == .cable)
+        #expect(tbCable.isInferred == true)
+        #expect(tbCable.localizedVerdictLabel(en) == "Throttled (inferred)")
+        #expect(tbCable.localizedVerdictLabel(zh) == "被限速（推断）")
+        #expect(tbCable.localizedBottleneckSegmentLabel(en) == "Cable-limited (inferred)")
+        #expect(tbCable.localizedBottleneckSegmentLabel(zh) == "线缆限速（推断）")
+        #expect(tbCable.localizedDiagnosticDetail(en).lowercased().contains("inferred"))
+        #expect(tbCable.localizedDiagnosticDetail(zh).contains("推断"))
+        #expect(!tbCable.localizedDiagnosticDetail(zh).contains("bcdUSB"))
+
+        // Positive direct control: TBPortDirectSSD (read 20G port < read 40G device) is NOT inferred
+        let tbPort = try #require(byName["TBPortDirectSSD"])
+        #expect(tbPort.verdict == .throttled)
+        #expect(tbPort.bottleneckSegment == .port)
+        #expect(tbPort.isInferred == false)
+        #expect(tbPort.localizedVerdictLabel(zh) == "被限速")
+
+        // CLI JSON & text verification
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let jsonZh = try BusCLIRunner.renderTopologyJSON(snapshot: snap, localizer: zh, isDemo: false)
+        let payloadZh = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(jsonZh.utf8))
+        let pMapZh = Dictionary(uniqueKeysWithValues: payloadZh.devices.map { ($0.name, $0) })
+        #expect(pMapZh["BillboardAux12M"]?.deviceMaxGbps == nil)
+        #expect(pMapZh["BillboardAux12M"]?.isInferred == true)
+        #expect(pMapZh["BillboardAux12M"]?.verdictLabel == "正常（推断）")
+        #expect(pMapZh["USB2PortDrive"]?.portCeilingLabel == "480 Mb/s（推断）")
+        #expect(pMapZh["TBCableInferredSSD"]?.isInferred == true)
+        #expect(pMapZh["TBCableInferredSSD"]?.verdictLabel == "被限速（推断）")
+        #expect(pMapZh["TBCableInferredSSD"]?.bottleneckSegmentLabel == "线缆限速（推断）")
+
+        let textZh = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: zh, isDemo: false)
+        #expect(textZh.contains("上限：480 Mb/s（推断）"))
+        let botZh = BusCLIRunner.renderBottlenecksText(snapshot: snap, localizer: zh, isDemo: false)
+        #expect(botZh.contains("[线缆限速（推断）]"))
+    }
 }

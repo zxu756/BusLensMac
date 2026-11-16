@@ -136,6 +136,7 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     public var negotiatedSpeedLabel: String
     public var negotiatedGbps: Double
     public var portCeilingGbps: Double?
+    public var isPortCeilingInferred: Bool
     public var deviceMaxGbps: Double?
     public var upstreamHubGbps: Double?
     public var depth: Int
@@ -159,6 +160,7 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         negotiatedSpeedLabel: String,
         negotiatedGbps: Double,
         portCeilingGbps: Double?,
+        isPortCeilingInferred: Bool = false,
         deviceMaxGbps: Double? = nil,
         upstreamHubGbps: Double? = nil,
         depth: Int = 0,
@@ -182,8 +184,10 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         self.negotiatedGbps = max(0, negotiatedGbps)
         if let portCeilingGbps, portCeilingGbps > 0 {
             self.portCeilingGbps = portCeilingGbps
+            self.isPortCeilingInferred = isPortCeilingInferred
         } else {
             self.portCeilingGbps = nil
+            self.isPortCeilingInferred = false
         }
         if let deviceMaxGbps, deviceMaxGbps > 0 {
             self.deviceMaxGbps = deviceMaxGbps
@@ -201,10 +205,13 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         self.capability = capability
         self.bottleneckSegment = bottleneckSegment
         self.isInferred = isInferred ?? (
-            protocolKind == .usbHost
-                && capability?.bcdUSB != nil
-                && capability?.isAuxiliaryBillboardEndpoint != true
-                && (verdict == .throttled || verdict == .normal)
+            (self.isPortCeilingInferred && (verdict == .throttled || verdict == .fullRate))
+                || bottleneckSegment == .cable
+                || (
+                    protocolKind == .usbHost
+                        && (capability?.bcdUSB != nil || capability?.isAuxiliaryBillboardEndpoint == true)
+                        && (verdict == .throttled || verdict == .normal)
+                )
         )
         self.isPhysicalPortInferred = isPhysicalPortInferred
         self.verdict = verdict
@@ -234,7 +241,9 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
 
     @MainActor
     public func localizedPortCeilingLabel(_ localizer: AppLocalizer) -> String {
-        BottleneckDiagnoser.formatCeilingGbps(portCeilingGbps, localizer: localizer)
+        let base = BottleneckDiagnoser.formatCeilingGbps(portCeilingGbps, localizer: localizer)
+        guard isPortCeilingInferred, let portCeilingGbps, portCeilingGbps > 0 else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
     }
 
     @MainActor
@@ -307,6 +316,7 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
     public var protocolKind: BusProtocolKind
     public var maxRateLabel: String
     public var maxGbps: Double?
+    public var isMaxGbpsInferred: Bool
     public var negotiatedGbps: Double
     public var isConnected: Bool
     public var devices: [AttachedBusDevice]
@@ -317,6 +327,7 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
         protocolKind: BusProtocolKind,
         maxRateLabel: String? = nil,
         maxGbps: Double?,
+        isMaxGbpsInferred: Bool = false,
         negotiatedGbps: Double,
         isConnected: Bool,
         devices: [AttachedBusDevice]
@@ -326,9 +337,11 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
         self.protocolKind = protocolKind
         if let maxGbps, maxGbps > 0 {
             self.maxGbps = maxGbps
+            self.isMaxGbpsInferred = isMaxGbpsInferred
             self.maxRateLabel = maxRateLabel ?? BottleneckDiagnoser.formatSpeedGbps(maxGbps)
         } else {
             self.maxGbps = nil
+            self.isMaxGbpsInferred = false
             self.maxRateLabel = maxRateLabel ?? "Unknown"
         }
         self.negotiatedGbps = negotiatedGbps
@@ -338,7 +351,9 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
 
     @MainActor
     public func localizedMaxRateLabel(_ localizer: AppLocalizer) -> String {
-        BottleneckDiagnoser.formatCeilingGbps(maxGbps, localizer: localizer)
+        let base = BottleneckDiagnoser.formatCeilingGbps(maxGbps, localizer: localizer)
+        guard isMaxGbpsInferred, let maxGbps, maxGbps > 0 else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
     }
 
     @MainActor

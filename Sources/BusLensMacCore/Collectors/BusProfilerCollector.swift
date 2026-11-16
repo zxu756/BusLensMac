@@ -205,6 +205,11 @@ public enum BusProfilerCollector {
             }
             let peak = usbDevices.map(\.negotiatedGbps).max() ?? 0.0
             let resolvedControllerCeiling = controllerCeilingGbps ?? usbDevices.compactMap(\.portCeilingGbps).max()
+            let isControllerCeilingInferred: Bool = {
+                guard controllerCeilingGbps == nil, let maxCeil = resolvedControllerCeiling else { return false }
+                let matching = usbDevices.filter { $0.portCeilingGbps == maxCeil }
+                return !matching.isEmpty && matching.allSatisfy(\.isPortCeilingInferred)
+            }()
             if !usbDevices.isEmpty {
                 controllers.append(
                     PhysicalPortController(
@@ -212,6 +217,7 @@ public enum BusProfilerCollector {
                         title: busTitle,
                         protocolKind: .usbHost,
                         maxGbps: resolvedControllerCeiling,
+                        isMaxGbpsInferred: isControllerCeilingInferred,
                         negotiatedGbps: peak,
                         isConnected: true,
                         devices: usbDevices
@@ -554,15 +560,25 @@ public enum BusProfilerCollector {
             let resolvedPhysicalPort = ioregDev?.hostPhysicalPortLabel
                 ?? ioregHostPort?.physicalPortLabel
                 ?? ancestorPhysicalPort
-            let effectivePortCeiling = controllerCeilingGbps
-                ?? ioregDev?.hostPortCeilingGbps
-                ?? ioregHostPort?.portCeilingGbps
+            let (effectivePortCeiling, isPortCeilingInferred): (Double?, Bool) = {
+                if let ctrlCeil = controllerCeilingGbps {
+                    return (ctrlCeil, false)
+                }
+                if let devCeil = ioregDev?.hostPortCeilingGbps {
+                    return (devCeil, ioregDev?.isHostPortCeilingInferred ?? false)
+                }
+                if let portCeil = ioregHostPort?.portCeilingGbps {
+                    return (portCeil, ioregHostPort?.isPortCeilingInferred ?? false)
+                }
+                return (nil, false)
+            }()
 
             if !isHubContainer {
                 let eval = BottleneckDiagnoser.evaluate(
                     protocolKind: .usbHost,
                     negotiatedGbps: gbps,
                     portCeilingGbps: effectivePortCeiling,
+                    isPortCeilingInferred: isPortCeilingInferred,
                     behindExternalHub: behindExternalHub,
                     upstreamHubGbps: upstreamHubGbps,
                     capability: mergedCap
@@ -579,6 +595,7 @@ public enum BusProfilerCollector {
                         negotiatedSpeedLabel: gbps > 0 ? BottleneckDiagnoser.formatSpeedGbps(gbps) : "Unknown",
                         negotiatedGbps: gbps,
                         portCeilingGbps: effectivePortCeiling,
+                        isPortCeilingInferred: isPortCeilingInferred,
                         deviceMaxGbps: eval.deviceMaxGbps,
                         upstreamHubGbps: upstreamHubGbps,
                         depth: depth,

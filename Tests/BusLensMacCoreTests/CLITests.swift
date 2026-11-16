@@ -490,6 +490,27 @@ struct CLITests {
                   }
                 }
               ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "2",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "ExplicitTBPortLimited",
+                  "device_name_key": "ExplicitTBPortLimited",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
             }
           ],
           "SPUSBHostDataType": [
@@ -561,6 +582,37 @@ struct CLITests {
                             ]
                         ]
                     ]
+                ],
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 1,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "2",
+                            "Supported Link Speed": 8,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType3",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "ExplicitTBPortLimited"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
                 ]
             ]
         ]
@@ -586,8 +638,10 @@ struct CLITests {
         #expect((byNameZh["BcdUSBNormal10GDrive"]?["verdictLabel"] as? String) == "正常（推断）")
         #expect((byNameZh["BcdUSBNormal10GDrive"]?["diagnosticDetail"] as? String)?.contains("推断") == true)
 
-        #expect((byNameZh["ExplicitTBThrottled"]?["isInferred"] as? Bool) == false)
-        #expect((byNameZh["ExplicitTBThrottled"]?["verdictLabel"] as? String) == "被限速")
+        #expect((byNameZh["ExplicitTBThrottled"]?["isInferred"] as? Bool) == true)
+        #expect((byNameZh["ExplicitTBThrottled"]?["verdictLabel"] as? String) == "被限速（推断）")
+        #expect((byNameZh["ExplicitTBPortLimited"]?["isInferred"] as? Bool) == false)
+        #expect((byNameZh["ExplicitTBPortLimited"]?["verdictLabel"] as? String) == "被限速")
         #expect((byNameZh["VerifiedHIDMouse"]?["isInferred"] as? Bool) == false)
         #expect((byNameZh["VerifiedHIDMouse"]?["verdictLabel"] as? String) == "HID / 低速外设")
 
@@ -605,7 +659,8 @@ struct CLITests {
         #expect((byNameEn["BcdUSBThrottledDrive"]?["verdictLabel"] as? String) == "Throttled (inferred)")
         #expect((byNameEn["BcdUSBNormal10GDrive"]?["isInferred"] as? Bool) == true)
         #expect((byNameEn["BcdUSBNormal10GDrive"]?["verdictLabel"] as? String) == "Normal (inferred)")
-        #expect((byNameEn["ExplicitTBThrottled"]?["isInferred"] as? Bool) == false)
+        #expect((byNameEn["ExplicitTBThrottled"]?["isInferred"] as? Bool) == true)
+        #expect((byNameEn["ExplicitTBPortLimited"]?["isInferred"] as? Bool) == false)
         #expect((byNameEn["VerifiedHIDMouse"]?["isInferred"] as? Bool) == false)
 
         let textZhRes = BusCLIRunner.execute(arguments: [
@@ -641,7 +696,8 @@ struct CLITests {
         #expect(guiByName["BcdUSBThrottledDrive"]?.localizedVerdictLabel(zhLoc) == "被限速（推断）")
         #expect(guiByName["BcdUSBNormal10GDrive"]?.localizedVerdictLabel(enLoc) == "Normal (inferred)")
         #expect(guiByName["BcdUSBNormal10GDrive"]?.localizedVerdictLabel(zhLoc) == "正常（推断）")
-        #expect(guiByName["ExplicitTBThrottled"]?.localizedVerdictLabel(zhLoc) == "被限速")
+        #expect(guiByName["ExplicitTBThrottled"]?.localizedVerdictLabel(zhLoc) == "被限速（推断）")
+        #expect(guiByName["ExplicitTBPortLimited"]?.localizedVerdictLabel(zhLoc) == "被限速")
         #expect(guiByName["VerifiedHIDMouse"]?.localizedVerdictLabel(zhLoc) == "HID / 低速外设")
     }
 
@@ -715,14 +771,14 @@ struct CLITests {
             protocolKind: .thunderboltUSB4,
             negotiatedSpeedLabel: "20 Gb/s",
             negotiatedGbps: 20.0,
-            portCeilingGbps: 40.0,
+            portCeilingGbps: 20.0,
             deviceMaxGbps: 40.0,
             capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0),
-            bottleneckSegment: .cable,
+            bottleneckSegment: .port,
             isInferred: false,
             isPhysicalPortInferred: true,
             verdict: .throttled,
-            diagnosticDetail: "Throttled (cable-limited)"
+            diagnosticDetail: "Throttled (port-limited)"
         )
 
         let snapPureInferred = BusTopologySnapshot(

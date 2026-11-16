@@ -7,6 +7,7 @@ public struct IORegistryUSBDeviceRecord: Equatable, Sendable {
     public let linkSpeedGbps: Double?
     public let hostPhysicalPortLabel: String?
     public let hostPortCeilingGbps: Double?
+    public let isHostPortCeilingInferred: Bool
     public let capability: DeviceCapabilityDescriptor
 
     public init(
@@ -16,6 +17,7 @@ public struct IORegistryUSBDeviceRecord: Equatable, Sendable {
         linkSpeedGbps: Double?,
         hostPhysicalPortLabel: String? = nil,
         hostPortCeilingGbps: Double? = nil,
+        isHostPortCeilingInferred: Bool = false,
         capability: DeviceCapabilityDescriptor
     ) {
         self.locationID = locationID
@@ -24,6 +26,7 @@ public struct IORegistryUSBDeviceRecord: Equatable, Sendable {
         self.linkSpeedGbps = linkSpeedGbps
         self.hostPhysicalPortLabel = hostPhysicalPortLabel
         self.hostPortCeilingGbps = hostPortCeilingGbps
+        self.isHostPortCeilingInferred = isHostPortCeilingInferred
         self.capability = capability
     }
 }
@@ -34,7 +37,9 @@ public struct IORegistryUSBPortRecord: Equatable, Sendable {
     public let physicalPortLabel: String?
     public let companionLocationID: UInt32?
     public let rawOwnCeilingGbps: Double?
+    public let rawOwnCeilingIsInferred: Bool
     public var portCeilingGbps: Double?
+    public var isPortCeilingInferred: Bool
     public let isHostPort: Bool
 
     public init(
@@ -43,7 +48,9 @@ public struct IORegistryUSBPortRecord: Equatable, Sendable {
         physicalPortLabel: String?,
         companionLocationID: UInt32?,
         rawOwnCeilingGbps: Double?,
+        rawOwnCeilingIsInferred: Bool = false,
         portCeilingGbps: Double?,
+        isPortCeilingInferred: Bool = false,
         isHostPort: Bool
     ) {
         self.locationID = locationID
@@ -51,7 +58,9 @@ public struct IORegistryUSBPortRecord: Equatable, Sendable {
         self.physicalPortLabel = physicalPortLabel
         self.companionLocationID = companionLocationID
         self.rawOwnCeilingGbps = rawOwnCeilingGbps
+        self.rawOwnCeilingIsInferred = rawOwnCeilingIsInferred
         self.portCeilingGbps = portCeilingGbps
+        self.isPortCeilingInferred = isPortCeilingInferred
         self.isHostPort = isHostPort
     }
 }
@@ -288,12 +297,15 @@ public struct IORegistrySnapshot: Equatable, Sendable {
         let initialPorts = usbPorts
         for (loc, var portRec) in initialPorts {
             if let compLoc = portRec.companionLocationID {
-                let compCeiling = initialPorts[compLoc]?.rawOwnCeilingGbps
+                let compPort = initialPorts[compLoc]
+                let compCeiling = compPort?.rawOwnCeilingGbps
                 if let compCeiling, compCeiling > (portRec.portCeilingGbps ?? 0) {
                     portRec.portCeilingGbps = compCeiling
+                    portRec.isPortCeilingInferred = compPort?.rawOwnCeilingIsInferred ?? false
                     usbPorts[loc] = portRec
                 } else if compCeiling == nil, portRec.portCeilingGbps != nil {
                     portRec.portCeilingGbps = nil
+                    portRec.isPortCeilingInferred = false
                     usbPorts[loc] = portRec
                 }
             }
@@ -347,6 +359,7 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 linkSpeedGbps: linkSpeedGbps,
                 hostPhysicalPortLabel: resolvedHostPort?.physicalPortLabel,
                 hostPortCeilingGbps: resolvedHostPort?.portCeilingGbps,
+                isHostPortCeilingInferred: resolvedHostPort?.isPortCeilingInferred ?? false,
                 capability: cap
             )
         }
@@ -449,8 +462,10 @@ public struct IORegistrySnapshot: Equatable, Sendable {
                 portNumber: portNum,
                 physicalPortLabel: label,
                 companionLocationID: companionLoc,
-                rawOwnCeilingGbps: ownCeiling,
-                portCeilingGbps: ownCeiling,
+                rawOwnCeilingGbps: ownCeiling?.gbps,
+                rawOwnCeilingIsInferred: ownCeiling?.isInferred ?? false,
+                portCeilingGbps: ownCeiling?.gbps,
+                isPortCeilingInferred: ownCeiling?.isInferred ?? false,
                 isHostPort: isHostPort
             )
             if isHostPort {
@@ -479,18 +494,19 @@ public struct IORegistrySnapshot: Equatable, Sendable {
 
     private static func computeOwnUSBPortCeilingGbps(
         portNode: [String: Any]
-    ) -> Double? {
+    ) -> (gbps: Double, isInferred: Bool)? {
         if parseBool(portNode["UsbProtocol (3.x)"]) == true {
             return nil
         }
         if portNode["UsbProtocolCompanion (3.x)"] != nil {
             return nil
         }
+        // Pure USB 2.0 / 1.x port ceilings are derived from USB protocol constants rather than a numeric speed property.
         if parseBool(portNode["UsbProtocol (2.0)"]) == true {
-            return 0.48
+            return (0.48, true)
         }
         if parseBool(portNode["UsbProtocol (1.x)"]) == true {
-            return 0.012
+            return (0.012, true)
         }
         return nil
     }
