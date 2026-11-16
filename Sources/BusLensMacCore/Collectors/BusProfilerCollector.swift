@@ -446,67 +446,6 @@ public enum BusProfilerCollector {
         return false
     }
 
-    private static func isExplicitUSBHubClass(_ item: [String: Any]) -> Bool {
-        if let clsInt = item["bDeviceClass"] as? Int, clsInt == 9 {
-            return true
-        }
-        if let clsStr = item["bDeviceClass"] as? String {
-            let normalized = clsStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if normalized == "9" || normalized == "0x09" || normalized == "0x9" || normalized == "hub" {
-                return true
-            }
-        }
-        return false
-    }
-
-    private static func extractInlineUSBDescriptor(_ item: [String: Any]) -> DeviceCapabilityDescriptor? {
-        let bcd = parseFlexibleInt(item["bcdUSB"])
-        let devClass = parseFlexibleInt(item["bDeviceClass"])
-        var ifaceClasses: [Int] = []
-        if let singleIface = parseFlexibleInt(item["bInterfaceClass"]) {
-            ifaceClasses.append(singleIface)
-        }
-        if bcd == nil && devClass == nil && ifaceClasses.isEmpty {
-            return nil
-        }
-        return DeviceCapabilityDescriptor(
-            bcdUSB: bcd,
-            usbDeviceClass: devClass,
-            usbInterfaceClasses: ifaceClasses
-        )
-    }
-
-    private static func parseFlexibleInt(_ raw: Any?) -> Int? {
-        guard let raw else { return nil }
-        if let i = raw as? Int { return i }
-        if let n = raw as? NSNumber { return n.intValue }
-        if let s = raw as? String {
-            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if trimmed.hasPrefix("0x"), let hex = Int(trimmed.dropFirst(2), radix: 16) {
-                return hex
-            }
-            if let dec = Int(trimmed) {
-                return dec
-            }
-        }
-        return nil
-    }
-
-    private static func mergeDescriptors(
-        ioregCap: DeviceCapabilityDescriptor?,
-        inlineCap: DeviceCapabilityDescriptor?
-    ) -> DeviceCapabilityDescriptor? {
-        guard ioregCap != nil || inlineCap != nil else { return nil }
-        return DeviceCapabilityDescriptor(
-            bcdUSB: inlineCap?.bcdUSB ?? ioregCap?.bcdUSB,
-            usbDeviceClass: inlineCap?.usbDeviceClass ?? ioregCap?.usbDeviceClass,
-            usbInterfaceClasses: !(inlineCap?.usbInterfaceClasses.isEmpty ?? true)
-                ? (inlineCap?.usbInterfaceClasses ?? [])
-                : (ioregCap?.usbInterfaceClasses ?? []),
-            tbSupportedLinkGbps: inlineCap?.tbSupportedLinkGbps ?? ioregCap?.tbSupportedLinkGbps
-        )
-    }
-
     private static func walkUSBDevices(
         items: [[String: Any]],
         busTitle: String,
@@ -554,8 +493,8 @@ public enum BusProfilerCollector {
             let gbps = parsedGbps > 0 ? parsedGbps : (ioregDev?.linkSpeedGbps ?? 0.0)
             let children = (item["_items"] as? [[String: Any]]) ?? []
             let isBuiltIn = isBuiltInUSBNode(item) || (ioregDev?.isInternalPort == true)
-            let mergedCap = mergeDescriptors(ioregCap: ioregDev?.capability, inlineCap: extractInlineUSBDescriptor(item))
-            let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9)
+            let mergedCap = ioregDev?.capability
+            let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9)
 
             let resolvedPhysicalPort = ioregDev?.hostPhysicalPortLabel
                 ?? ioregHostPort?.physicalPortLabel

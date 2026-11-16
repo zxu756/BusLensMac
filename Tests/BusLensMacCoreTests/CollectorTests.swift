@@ -277,7 +277,7 @@ struct CollectorTests {
                 },
                 {
                   "_name": "4-Port USB 3.0 Hub",
-                  "bDeviceClass": 9,
+                  "location_id": "0x01200000",
                   "device_speed": "super_speed",
                   "_items": [
                     {
@@ -301,7 +301,21 @@ struct CollectorTests {
         let redacted = try JSONSerialization.data(withJSONObject: BusProfilerCollector.redactHardwareIdentifiers(rawObj))
         #expect(!String(decoding: redacted, as: UTF8.self).contains("LEGACY-SECRET-SERIAL-01"))
 
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(rawData)
+        let legacyIORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIPort",
+                    "locationID": 0x01200000,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01200000, "bDeviceClass": 9]
+                    ]
+                ]
+            ]
+        ]
+        let legacyPlist = try PropertyListSerialization.data(fromPropertyList: legacyIORegDict, format: .xml, options: 0)
+        let legacyIOReg = try IORegistrySnapshot.parsePlistData(legacyPlist)
+
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(rawData, ioregSnapshot: legacyIOReg)
         #expect(snap.devices.count == 3)
 
         let directEnclosure = try #require(snap.devices.first { $0.name == "NVMe Enclosure" })
@@ -344,7 +358,7 @@ struct CollectorTests {
                 },
                 {
                   "_name": "Anker USB-C Adapter",
-                  "bDeviceClass": 9,
+                  "location_id": "0x01300000",
                   "manufacturer": "Anker",
                   "device_speed": "super_speed",
                   "_items": [
@@ -360,7 +374,20 @@ struct CollectorTests {
           ]
         }
         """
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8))
+        let adapterIORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIPort",
+                    "locationID": 0x01300000,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01300000, "bDeviceClass": 9]
+                    ]
+                ]
+            ]
+        ]
+        let adapterPlist = try PropertyListSerialization.data(fromPropertyList: adapterIORegDict, format: .xml, options: 0)
+        let adapterIOReg = try IORegistrySnapshot.parsePlistData(adapterPlist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8), ioregSnapshot: adapterIOReg)
         let hubble = try #require(snap.devices.first { $0.name == "Hubble Backup Drive" })
         #expect(hubble.negotiatedSpeedLabel == "480 Mb/s")
         #expect(hubble.verdict == .indeterminate)
@@ -464,43 +491,43 @@ struct CollectorTests {
               "_items": [
                 {
                   "_name": "Composite 10G Creator Dock",
+                  "USBKeyLocationID": "0x02110000",
                   "USBDeviceKeyVendorName": "Acme",
                   "USBDeviceKeyLinkSpeed": "10 Gb/s",
-                  "bDeviceClass": 0,
                   "_items": [
                     {
                       "_name": "Downstream Card Reader",
+                      "USBKeyLocationID": "0x02111000",
                       "USBDeviceKeyVendorName": "Acme",
-                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
-                      "bDeviceClass": 0
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s"
                     }
                   ]
                 },
                 {
                   "_name": "Billboard 10G Video Dock",
+                  "USBKeyLocationID": "0x02120000",
                   "USBDeviceKeyVendorName": "Acme",
                   "USBDeviceKeyLinkSpeed": "10 Gb/s",
-                  "bDeviceClass": 17,
                   "_items": [
                     {
                       "_name": "Dock Audio Endpoint",
+                      "USBKeyLocationID": "0x02121000",
                       "USBDeviceKeyVendorName": "Acme",
-                      "USBDeviceKeyLinkSpeed": "480 Mb/s",
-                      "bDeviceClass": 0
+                      "USBDeviceKeyLinkSpeed": "480 Mb/s"
                     }
                   ]
                 },
                 {
                   "_name": "Explicit Class-9 USB3 Hub",
+                  "USBKeyLocationID": "0x02130000",
                   "USBDeviceKeyVendorName": "Genesys",
                   "USBDeviceKeyLinkSpeed": "10 Gb/s",
-                  "bDeviceClass": 9,
                   "_items": [
                     {
                       "_name": "Hub Child SSD",
+                      "USBKeyLocationID": "0x02131000",
                       "USBDeviceKeyVendorName": "Acme",
-                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
-                      "bDeviceClass": 0
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s"
                     }
                   ]
                 }
@@ -509,7 +536,25 @@ struct CollectorTests {
           ]
         }
         """
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticDockJSON.utf8))
+        let dockIORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIPort",
+                    "locationID": 0x02100000,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02110000, "bDeviceClass": 0],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02111000, "bDeviceClass": 0],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02120000, "bDeviceClass": 17],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02121000, "bDeviceClass": 0],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02130000, "bDeviceClass": 9],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x02131000, "bDeviceClass": 0]
+                    ]
+                ]
+            ]
+        ]
+        let dockPlist = try PropertyListSerialization.data(fromPropertyList: dockIORegDict, format: .xml, options: 0)
+        let dockIOReg = try IORegistrySnapshot.parsePlistData(dockPlist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticDockJSON.utf8), ioregSnapshot: dockIOReg)
         let names = snap.devices.map(\.name)
         #expect(names.contains("Composite 10G Creator Dock"))
         #expect(names.contains("Downstream Card Reader"))
@@ -572,7 +617,6 @@ struct CollectorTests {
                       "_name": "External Hub On Front Right",
                       "USBKeyLocationID": "0x02120000",
                       "USBDeviceKeyLinkSpeed": "480 Mb/s",
-                      "bDeviceClass": 9,
                       "_items": [
                         {
                           "_name": "Downstream Drive On Hub Port 3",
@@ -588,9 +632,22 @@ struct CollectorTests {
           ]
         }
         """
+        var twoFrontIOReg = ioregSnap
+        if let existingRight = twoFrontIOReg.usbDevicesByLocation[0x02120000] {
+            twoFrontIOReg.usbDevicesByLocation[0x02120000] = IORegistryUSBDeviceRecord(
+                locationID: existingRight.locationID,
+                name: "External Hub On Front Right",
+                isInternalPort: false,
+                linkSpeedGbps: 0.48,
+                hostPhysicalPortLabel: existingRight.hostPhysicalPortLabel,
+                hostPortCeilingGbps: existingRight.hostPortCeilingGbps,
+                isHostPortCeilingInferred: existingRight.isHostPortCeilingInferred,
+                capability: DeviceCapabilityDescriptor(bcdUSB: 0x0200, usbDeviceClass: 9)
+            )
+        }
         let twoFrontSnap = try BusProfilerCollector.parseSystemProfilerJSONValidated(
             Data(twoFrontPortsSP.utf8),
-            ioregSnapshot: ioregSnap
+            ioregSnapshot: twoFrontIOReg
         )
         let leftDev = try #require(twoFrontSnap.devices.first { $0.name == "Front Left Keyboard" })
         let rightChild = try #require(twoFrontSnap.devices.first { $0.name == "Downstream Drive On Hub Port 3" })
@@ -1152,6 +1209,7 @@ struct CollectorTests {
               "_items": [
                 {
                   "_name": "NotBuiltInOrClass9Container",
+                  "USBKeyLocationID": "0x01100000",
                   "built_in": "Yes",
                   "USBDeviceKeyDeviceClass": 9,
                   "device_class": 9,
@@ -1162,8 +1220,8 @@ struct CollectorTests {
                   "_items": [
                     {
                       "_name": "RealSpeedChild",
-                      "USBDeviceKeyLinkSpeed": "5 Gb/s",
-                      "bInterfaceClass": 3
+                      "USBKeyLocationID": "0x01110000",
+                      "USBDeviceKeyLinkSpeed": "5 Gb/s"
                     }
                   ]
                 }
@@ -1182,7 +1240,32 @@ struct CollectorTests {
           ]
         }
         """
-        let snapDeleted = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(deletedKeysJSON.utf8))
+        let deletedKeysIORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIPort",
+                    "locationID": 0x01100000,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01100000,
+                            "bInterfaceClasses": [3],
+                            "interface_class": 3
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let deletedKeysPlist = try PropertyListSerialization.data(fromPropertyList: deletedKeysIORegDict, format: .xml, options: 0)
+        let deletedKeysIOReg = try IORegistrySnapshot.parsePlistData(deletedKeysPlist)
+        let snapDeleted = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(deletedKeysJSON.utf8), ioregSnapshot: deletedKeysIOReg)
         let tbCtrl = try #require(snapDeleted.controllers.first { $0.protocolKind == .thunderboltUSB4 })
         let usbCtrl = try #require(snapDeleted.controllers.first { $0.protocolKind == .usbHost })
         #expect(tbCtrl.maxGbps == nil)
@@ -1192,7 +1275,7 @@ struct CollectorTests {
         let parentDev = try #require(snapDeleted.devices.first { $0.name == "NotBuiltInOrClass9Container" })
         #expect(parentDev.negotiatedGbps == 0.0)
         #expect(parentDev.portCeilingGbps == nil)
-        #expect(parentDev.capability == nil)
+        #expect(parentDev.capability == DeviceCapabilityDescriptor())
         #expect(parentDev.verdict == .indeterminate)
 
         let childDev = try #require(snapDeleted.devices.first { $0.name == "RealSpeedChild" })
@@ -1365,5 +1448,109 @@ struct CollectorTests {
         #expect(dev.localizedPortCeilingLabel(en) == "Unknown")
         #expect(dev.localizedPortCeilingLabel(zh) == "未知")
         #expect(dev.verdict == .indeterminate)
+    }
+
+    @Test("S4 Item 2: BusProfilerCollector does not read ioreg-only USB descriptor keys (bcdUSB, bDeviceClass, bInterfaceClass) from system_profiler JSON")
+    func testS4Item2SystemProfilerDoesNotReadIORegUSBDescriptorKeys() throws {
+        let syntheticSP = """
+        {
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                {
+                  "_name": "InlineClass9FakeHub",
+                  "USBKeyLocationID": "0x01110000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "bDeviceClass": 9,
+                  "_items": [
+                    {
+                      "_name": "InlineBcdUSB0210Drive",
+                      "USBKeyLocationID": "0x01111000",
+                      "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                      "bcdUSB": "0x0210",
+                      "bDeviceClass": 0,
+                      "bInterfaceClass": 8
+                    },
+                    {
+                      "_name": "InlineHIDClass3Mouse",
+                      "USBKeyLocationID": "0x01112000",
+                      "USBDeviceKeyLinkSpeed": "12 Mb/s",
+                      "bcdUSB": "0x0200",
+                      "bDeviceClass": 0,
+                      "bInterfaceClass": 3
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        // Without ioregSnapshot, inline bcdUSB / bDeviceClass / bInterfaceClass inside system_profiler JSON must be ignored
+        let snapWithoutIOReg = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8))
+        let noIORegByName = Dictionary(uniqueKeysWithValues: snapWithoutIOReg.devices.map { ($0.name, $0) })
+        let fakeHub = try #require(noIORegByName["InlineClass9FakeHub"], "bDeviceClass inside system_profiler JSON must not hide hub without ioreg")
+        #expect(fakeHub.capability == nil)
+        #expect(fakeHub.verdict == .indeterminate)
+
+        let driveNoIOReg = try #require(noIORegByName["InlineBcdUSB0210Drive"])
+        #expect(driveNoIOReg.capability == nil)
+        #expect(driveNoIOReg.verdict == .indeterminate)
+
+        let mouseNoIOReg = try #require(noIORegByName["InlineHIDClass3Mouse"])
+        #expect(mouseNoIOReg.capability == nil)
+        #expect(mouseNoIOReg.verdict == .indeterminate)
+
+        // With ioregSnapshot providing IOUSBHostDevice / IOUSBHostInterface keys, descriptors take effect cleanly
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (2.0)": true,
+                    "UsbProtocolCompanion (3.x)": "IOService:/usb-ss@01200000",
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 9,
+                            "UsbLinkSpeed": 480_000_000,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOUSBHostDevice",
+                                    "locationID": 0x01111000,
+                                    "bcdUSB": 0x0210,
+                                    "bDeviceClass": 0,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]
+                                    ]
+                                ],
+                                [
+                                    "IOObjectClass": "IOUSBHostDevice",
+                                    "locationID": 0x01112000,
+                                    "bcdUSB": 0x0200,
+                                    "bDeviceClass": 0,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snapWithIOReg = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let withIORegByName = Dictionary(uniqueKeysWithValues: snapWithIOReg.devices.map { ($0.name, $0) })
+        #expect(withIORegByName["InlineClass9FakeHub"] == nil)
+        #expect(withIORegByName["InlineBcdUSB0210Drive"]?.verdict == .throttled)
+        #expect(withIORegByName["InlineHIDClass3Mouse"]?.verdict == .lowSpeedPeripheral)
     }
 }

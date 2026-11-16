@@ -108,7 +108,7 @@ struct BusLensMacCoreTests {
               "_items": [
                 {
                   "_name": "USB2 Hub",
-                  "bDeviceClass": 9,
+                  "USBKeyHardwareType": "Built-in",
                   "USBDeviceKeyLinkSpeed": "480 Mb/s",
                   "_items": [
                     {

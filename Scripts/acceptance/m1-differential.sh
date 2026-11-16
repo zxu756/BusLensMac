@@ -283,9 +283,7 @@ def walk_sp_usb_items(items: list):
             or str(item.get("Built-in_Device", "")).lower() == "yes"
             or (loc is not None and usb_dev_internal_by_loc.get(loc, False))
         )
-        dev_class = item.get("bDeviceClass")
-        if not isinstance(dev_class, int) and loc is not None:
-            dev_class = usb_dev_class_by_loc.get(loc)
+        dev_class = usb_dev_class_by_loc.get(loc) if loc is not None else None
         is_hub_container = built_in or (dev_class == 9)
 
         children = item.get("_items") or []
@@ -822,8 +820,8 @@ m1_mutations = [
     (
         "M2_U13_class9 (hide any USB device with _items regardless of bDeviceClass == 9)",
         "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
-        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9)",
-        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9) || !children.isEmpty",
+        "let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9)",
+        "let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9) || !children.isEmpty",
         "CollectorTests/testU13NonHubClassDockWithChildRemainsVisible",
         "U13: Only USB Device Class 9",
     ),

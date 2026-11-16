@@ -39,7 +39,7 @@
 | 1 台机器（Apple Silicon Mac mini，macOS 27.0.1 arm64）、3 台外接设备（`40 Gb/s`、`480 Mb/s`、`12 Mb/s`）的外设枚举数量与协商速率读取（`SPThunderboltDataType` + `SPUSBHostDataType` + `ioreg`） | **已在真机验证** | **仅核对了设备数（3 台）与协商速率**（`40 Gb/s`、`480 Mb/s`、`12 Mb/s`，本机 0 台被限速设备），对照脱敏真机快照（`host_macmini_scrubbed.json` 及配对的 `host_macmini_20261115_sp_scrubbed.json` + `host_macmini_20261115_ioreg_scrubbed.plist`）、同源 `ioreg` 对照脚本（`m1-differential.sh`）及连续 50 次 `--cli topology --json` 实测（单次 `< 0.9` 秒，退出码 `0`，0 标识符泄漏）。 |
 | 限速判断与瓶颈段归因（`被限速` / `bcdUSB` 推断结论、充电线降速与外接 USB 2.0 集线器限速） | **未在真机验证（仅合成样本测试）** | 本机 3 台设备无一台被限速，且未做人工换线/换集线器实采；限速判断与靠 `bcdUSB` 推断出的结论（输出带 `推断` 标记）仅在 `DiagnoserTests` 与 `m1-differential.sh` 的合成样本上测试。 |
 | 旧版 `SPUSBDataType` 结构（macOS 14–15） | **尚未在真机上验证（仅合成样本测试）** | 仅通过 `CollectorTests`（`Tests/BusLensMacCoreTests/CollectorTests.swift`）中的合成 JSON 样本测试。 |
-| 保留的旧格式与电源字符串表键（`location_id`、`vendor_id`、`Built-in_Device`、`device_speed`、`serial_num`、`sppower_ac_charger_watts`） | **尚未在真机上验证（没有在作者的机器上验证）** | 键名来自旧格式的公开样本（`location_id`、`vendor_id`、`device_speed`、`serial_num`；其中 `Built-in_Device` 来自公开 XML 样本，JSON 下的键名未确认）或系统自带的字符串表（`sppower_ac_charger_watts` 来自本机 `SPPowerReporter.spreporter` 字符串表，仅在带电源适配器信息的机型上输出），没有在作者的机器上验证。 |
+| 保留的旧格式与电源字符串表键（`location_id`、`vendor_id`、`manufacturer`、`Built-in_Device`、`device_speed`、`serial_num`、`sppower_ac_charger_watts`） | **尚未在真机上验证（没有在作者的机器上验证）** | 键名来自旧格式的公开样本（`location_id`、`vendor_id`、`manufacturer`、`device_speed`、`serial_num`；其中 `Built-in_Device` 来自公开 XML 样本，JSON 下的键名未确认）或系统自带的字符串表（`sppower_ac_charger_watts` 来自本机 `SPPowerReporter.spreporter` 字符串表，仅在带电源适配器信息的机型上输出），没有在作者的机器上验证。 |
 | 雷雳 5 / Thunderbolt 5（`80 Gb/s` / `120 Gb/s`） | **尚未在真机上验证（仅合成样本测试）** | 仅通过合成速率与链路位掩码测试，尚未在雷雳 5 真机硬件上实测。 |
 
 ## 计划中功能（M2）

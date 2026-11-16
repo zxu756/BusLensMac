@@ -122,9 +122,9 @@ struct DiagnoserTests {
                 },
                 {
                   "_name": "USB 1.0 HID Keypad",
+                  "location_id": "0x01140000",
                   "manufacturer": "Generic",
-                  "device_speed": "low_speed",
-                  "bInterfaceClass": 3
+                  "device_speed": "low_speed"
                 },
                 {
                   "_name": "USB 1.1 Unclassified Device",
@@ -136,7 +136,26 @@ struct DiagnoserTests {
           ]
         }
         """
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8))
+        let u9IORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x01140000,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01140000,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let u9Plist = try PropertyListSerialization.data(fromPropertyList: u9IORegDict, format: .xml, options: 0)
+        let u9IOReg = try IORegistrySnapshot.parsePlistData(u9Plist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8), ioregSnapshot: u9IOReg)
         #expect(snap.devices.count == 5)
 
         let en = AppLocalizer(fixedLanguage: .en)
@@ -231,33 +250,66 @@ struct DiagnoserTests {
               "_items": [
                 {
                   "_name": "ThumbDrive NoDesc",
+                  "USBKeyLocationID": "0x01110000",
                   "USBDeviceKeyVendorName": "Generic",
-                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
-                  "bDeviceClass": 0,
-                  "bInterfaceClass": 8
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
                 },
                 {
                   "_name": "ThumbDrive USB3At12M",
+                  "USBKeyLocationID": "0x01120000",
                   "USBDeviceKeyVendorName": "Generic",
-                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
-                  "bcdUSB": "0x0210",
-                  "bDeviceClass": 0,
-                  "bInterfaceClass": 8
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
                 },
                 {
                   "_name": "Optical Mouse",
+                  "USBKeyLocationID": "0x01130000",
                   "USBDeviceKeyVendorName": "Generic",
-                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
-                  "bcdUSB": "0x0200",
-                  "bDeviceClass": 0,
-                  "bInterfaceClass": 3
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
                 }
               ]
             }
           ]
         }
         """
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticMassStorage12M.utf8))
+        let u14IORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x01100000,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]
+                            ]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01120000,
+                            "bcdUSB": 0x0210,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]
+                            ]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01130000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let u14Plist = try PropertyListSerialization.data(fromPropertyList: u14IORegDict, format: .xml, options: 0)
+        let u14IOReg = try IORegistrySnapshot.parsePlistData(u14Plist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticMassStorage12M.utf8), ioregSnapshot: u14IOReg)
         let diskNoDesc = try #require(snap.devices.first { $0.name == "ThumbDrive NoDesc" })
         #expect(diskNoDesc.negotiatedSpeedLabel == "12 Mb/s")
         #expect(diskNoDesc.verdict == .indeterminate)
@@ -660,15 +712,17 @@ struct DiagnoserTests {
                 ("Portable SSD T7", 10.0, .indeterminate),
                 ("Samsung T5", 5.0, .indeterminate),
             ]),
-            ("c7_dock", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"CalDigit TS4 Dock","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"CalDigit"},{"_name":"USB3 Gen2 Hub","bDeviceClass":9,"USBDeviceKeyLinkSpeed":"10 Gb/s","USBDeviceKeyVendorName":"Genesys","_items":[{"_name":"Elements SE","USBDeviceKeyLinkSpeed":"5 Gb/s","USBDeviceKeyVendorName":"WD"}]}]}]}"#, [
+            ("c7_dock", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"CalDigit TS4 Dock","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"CalDigit"},{"_name":"USB3 Gen2 Hub","USBDeviceKeyLinkSpeed":"10 Gb/s","USBDeviceKeyVendorName":"Genesys","_items":[{"_name":"Elements SE","USBDeviceKeyLinkSpeed":"5 Gb/s","USBDeviceKeyVendorName":"WD"}]}]}]}"#, [
                 ("CalDigit TS4 Dock", 0.48, .indeterminate),
+                ("USB3 Gen2 Hub", 10.0, .indeterminate),
                 ("Elements SE", 5.0, .indeterminate),
             ]),
             ("e1_empty", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus"}],"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"Up to 40 Gb/s","receptacle_status_key":"receptacle_no_devices_connected"}}],"SPPowerDataType":[]}"#, []),
             ("l1_legacy_nvme_480", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"NVMe Enclosure","manufacturer":"Acme","device_speed":"high_speed","serial_num":"LEGACYSER1","vendor_id":"0x1234"}]}]}"#, [
                 ("NVMe Enclosure", 0.48, .indeterminate)
             ]),
-            ("l2_legacy_nvme_10G_hub_kb", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"4-Port USB 3.0 Hub","bDeviceClass":9,"device_speed":"super_speed","_items":[{"_name":"Portable SSD","manufacturer":"Acme","device_speed":"super_speed_plus"},{"_name":"Apple Keyboard","device_speed":"full_speed"}]}]}]}"#, [
+            ("l2_legacy_nvme_10G_hub_kb", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"4-Port USB 3.0 Hub","device_speed":"super_speed","_items":[{"_name":"Portable SSD","manufacturer":"Acme","device_speed":"super_speed_plus"},{"_name":"Apple Keyboard","device_speed":"full_speed"}]}]}]}"#, [
+                ("4-Port USB 3.0 Hub", 5.0, .indeterminate),
                 ("Portable SSD", 10.0, .indeterminate),
                 ("Apple Keyboard", 0.012, .indeterminate),
             ]),
@@ -754,7 +808,6 @@ struct DiagnoserTests {
                   "USBKeyLocationID": "0x01120000",
                   "USBDeviceKeyLinkSpeed": "10 Gb/s",
                   "USBDeviceKeyVendorName": "Acme",
-                  "bcdUSB": "0x0320",
                   "UsbDeviceMaxSpeedGbps": 20
                 },
                 {
@@ -768,7 +821,6 @@ struct DiagnoserTests {
                   "USBKeyLocationID": "0x01140000",
                   "USBDeviceKeyLinkSpeed": "10 Gb/s",
                   "USBDeviceKeyVendorName": "Acme",
-                  "bcdUSB": "0x0320",
                   "device_max_speed": "20 Gb/s"
                 },
                 {

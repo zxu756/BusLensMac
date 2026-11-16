@@ -18,7 +18,7 @@ In **M0 & M1 (`Unreleased (after v0.2.0)`)**, **BusLens Mac** provides a read-on
   - **Verified on real hardware**: Only external device enumeration count (`3` attached devices) and negotiated link speeds (`40 Gb/s`, `480 Mb/s`, `12 Mb/s`; `0` throttled devices) on `1` machine (Apple Silicon Mac mini, macOS 27.0.1 arm64).
   - **Link throttling & bottleneck segment judgment (`Throttled` / `bcdUSB` inference, charging-only cables & external USB 2.0 hub throttling)**: *Unverified on real hardware (synthetic fixtures only) / 未在真机验证（仅合成样本测试）*.
   - **macOS 14–15 legacy `SPUSBDataType` schema**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
-  - **Retained legacy & AC charger keys (`location_id`, `vendor_id`, `Built-in_Device`, `device_speed`, `serial_num`, `sppower_ac_charger_watts`)**: *Key names sourced from public legacy-format samples (`Built-in_Device` from XML; JSON key name unconfirmed) or macOS built-in SystemProfiler string tables; not verified on the author's machine / 键名来自旧格式的公开样本或系统自带的字符串表，没有在作者的机器上验证*.
+  - **Retained legacy & AC charger keys (`location_id`, `vendor_id`, `manufacturer`, `Built-in_Device`, `device_speed`, `serial_num`, `sppower_ac_charger_watts`)**: *Key names sourced from public legacy-format samples (`Built-in_Device` from XML; JSON key name unconfirmed) or macOS built-in SystemProfiler string tables; not verified on the author's machine / 键名来自旧格式的公开样本或系统自带的字符串表，没有在作者的机器上验证*.
   - **Thunderbolt 5 (`80 Gb/s` / `120 Gb/s`)**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
 
 ---

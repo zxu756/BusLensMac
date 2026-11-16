@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import pathlib
+import plistlib
 import re
 import shutil
 import statistics
@@ -278,6 +279,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     # Supplemental U9 & U14: 480 Mb/s & unclassified 12 Mb/s -> Indeterminate; verified HID class 3 -> HID peripheral
     # -----------------------------------------------------------------------
     u9_path = tmp / "u9_no_name_guessing.json"
+    u9_ioreg_path = tmp / "u9_no_name_guessing_ioreg.plist"
     u9_path.write_text(json.dumps({
         "SPUSBDataType": [{
             "_name": "USB 3.1 Bus",
@@ -286,17 +288,27 @@ with tempfile.TemporaryDirectory() as tmpdir:
                 {"_name": "Hidden Disk", "manufacturer": "Acme Storage", "device_speed": "high_speed"},
                 {"_name": "Wooting 60HE", "manufacturer": "Wooting", "device_speed": "high_speed"},
                 {"_name": "Unclassified 12M Disk", "manufacturer": "Acme Storage", "device_speed": "full_speed"},
-                {"_name": "USB 1.0 HID Device", "manufacturer": "Generic", "device_speed": "low_speed", "bInterfaceClass": 3},
-                {"_name": "USB 1.1 HID Receiver", "manufacturer": "Generic", "device_speed": "full_speed", "bInterfaceClass": 3}
+                {"_name": "USB 1.0 HID Device", "location_id": "0x01150000", "manufacturer": "Generic", "device_speed": "low_speed"},
+                {"_name": "USB 1.1 HID Receiver", "location_id": "0x01160000", "manufacturer": "Generic", "device_speed": "full_speed"}
             ]
         }]
     }), encoding="utf-8")
+    u9_ioreg_path.write_bytes(plistlib.dumps({
+        "AppleUSBHostPort": [{
+            "IOObjectClass": "AppleUSB20XHCIPort",
+            "locationID": 0x01100000,
+            "IORegistryEntryChildren": [
+                {"IOObjectClass": "IOUSBHostDevice", "locationID": 0x01150000, "IORegistryEntryChildren": [{"IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3}]},
+                {"IOObjectClass": "IOUSBHostDevice", "locationID": 0x01160000, "IORegistryEntryChildren": [{"IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3}]},
+            ],
+        }]
+    }, fmt=plistlib.FMT_XML))
 
     for lang, exp_indet_lbl, exp_low_lbl in [
         ("en", "Indeterminate", "HID peripheral"),
         ("zh", "无法判断是否被限速", "HID / 低速外设"),
     ]:
-        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u9_path), "--json", "--lang", lang])
+        rc_j, out_j, err_j, _ = run_cmd([bin_path, "--cli", "topology", "--input", str(u9_path), "--ioreg-input", str(u9_ioreg_path), "--json", "--lang", lang])
         assert rc_j == 0 and err_j == ""
         pj = json.loads(out_j)
         by_name = {d["name"]: d for d in pj["devices"]}
@@ -549,8 +561,8 @@ mutations = [
     (
         "M8 (U10: reintroduce name.contains('hub') hiding Hubble Backup Drive)",
         "Sources/BusLensMacCore/Collectors/BusProfilerCollector.swift",
-        "let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9)",
-        'let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || (mergedCap?.usbDeviceClass == 9) || name.lowercased().contains("hub")',
+        "let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9)",
+        'let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9) || name.lowercased().contains("hub")',
         "CollectorTests/testHubbleBackupDriveNotHiddenByHubSubstring",
         "U10: Leaf USB devices containing 'hub'",
     ),
