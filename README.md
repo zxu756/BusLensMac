@@ -50,7 +50,7 @@ Measured on **2026-11-15** on Apple Silicon Mac mini running **macOS 27.0.1 (`26
 
 ## Install
 
-### Homebrew Cask (`v0.3.0` release)
+### Homebrew Cask (`v0.4.0` release)
 
 ```bash
 brew install --cask zxu756/tap/buslens-mac

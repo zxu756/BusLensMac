@@ -423,7 +423,7 @@ struct CLITests {
 
         let ver = BusCLIRunner.execute(arguments: ["BusLensMac", "--version"])
         #expect(ver.exitCode == 0)
-        #expect(ver.stdout.contains("0.3.0"))
+        #expect(ver.stdout.contains("0.4.0"))
     }
 
     @Test("UR5: README verification row states 1 machine, 3 devices, enumeration & negotiated speed only (throttling unverified), and bcdUSB-inferred conclusions carry 'inferred' / '推断' across CLI, JSON, and GUI")

@@ -50,7 +50,7 @@
 
 ## 安装方式
 
-### Homebrew Cask 安装（`v0.3.0` 版本）
+### Homebrew Cask 安装（`v0.4.0` 版本）
 
 ```bash
 brew install --cask zxu756/tap/buslens-mac

@@ -179,7 +179,7 @@ def assert_command_output(cmd: str, stdout: str, stderr: str) -> str:
         assert stderr == "" and "用法：" in stdout and "--cli topology" in stdout and "bottlenecks" in stdout
         return stdout.strip().splitlines()[0]
     if cmd.endswith("--version"):
-        assert stderr == "" and "BusLens Mac 0.3.0" in stdout
+        assert stderr == "" and "BusLens Mac 0.4.0" in stdout
         return stdout.strip()
     raise AssertionError(f"Unhandled README command without explicit key-output assertion: {cmd}")
 
