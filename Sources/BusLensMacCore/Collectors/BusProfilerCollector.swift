@@ -3,6 +3,7 @@ import Foundation
 public enum BusCollectorError: Error, Equatable, Sendable {
     case unreadableInput(String)
     case invalidJSONFormat
+    case invalidIORegistryFormat
     case systemProfilerFailed(Int32)
 
     @MainActor
@@ -18,6 +19,11 @@ public enum BusCollectorError: Error, Equatable, Sendable {
                 "Input is not a valid system_profiler JSON object.",
                 "输入内容不是有效的 system_profiler JSON 对象。"
             )
+        case .invalidIORegistryFormat:
+            return localizer.L(
+                "Input is not a valid ioreg XML property list.",
+                "输入内容不是有效的 ioreg XML 属性列表。"
+            )
         case .systemProfilerFailed(let code):
             return localizer.L(
                 "/usr/sbin/system_profiler failed with exit code \(code).",
@@ -30,8 +36,8 @@ public enum BusCollectorError: Error, Equatable, Sendable {
 public enum BusProfilerCollector {
 
     private static let redactedKeys: Set<String> = [
+        // Legacy SPUSBDataType serial key from public samples (unverified on the author's machine; new SPUSBHostDataType uses USBDeviceKeySerialNumber).
         "serial_num",
-        "device_serial",
         "USBDeviceKeySerialNumber",
         "domain_uuid_key",
         "switch_uid_key"
@@ -59,9 +65,15 @@ public enum BusProfilerCollector {
     public static func parseSystemProfilerJSON(
         _ data: Data,
         capturedAt: Date = Date(),
-        pmsetOutput: String? = nil
+        pmsetOutput: String? = nil,
+        ioregSnapshot: IORegistrySnapshot? = nil
     ) -> BusTopologySnapshot {
-        if let snap = try? parseSystemProfilerJSONValidated(data, capturedAt: capturedAt, pmsetOutput: pmsetOutput) {
+        if let snap = try? parseSystemProfilerJSONValidated(
+            data,
+            capturedAt: capturedAt,
+            pmsetOutput: pmsetOutput,
+            ioregSnapshot: ioregSnapshot
+        ) {
             return snap
         }
         return BusTopologySnapshot(
@@ -75,7 +87,8 @@ public enum BusProfilerCollector {
     public static func parseSystemProfilerJSONValidated(
         _ data: Data,
         capturedAt: Date = Date(),
-        pmsetOutput: String? = nil
+        pmsetOutput: String? = nil,
+        ioregSnapshot: IORegistrySnapshot? = nil
     ) throws -> BusTopologySnapshot {
         guard !data.isEmpty,
               let rawObj = try? JSONSerialization.jsonObject(with: data),
@@ -94,6 +107,8 @@ public enum BusProfilerCollector {
 
             for busDict in sortedTB {
                 let rawName = (busDict["_name"] as? String) ?? "Thunderbolt Bus"
+                let routerID = extractTrailingInteger(from: rawName)
+                let tbBusRecord = routerID.flatMap { ioregSnapshot?.thunderboltBusesByRouter[$0] }
                 let displayTitle = prettifyBusName(rawName)
                 let rec = findFirstReceptacle(in: busDict)
                 let speedStr = rec?["current_speed_key"] as? String
@@ -104,16 +119,30 @@ public enum BusProfilerCollector {
                     ? BottleneckDiagnoser.parseSpeedGbps(speedStr!)
                     : 0.0
 
-                let ceilingGbps = explicitReceptacleCeilingGbps(in: rec)
+                let ceilingGbps = explicitReceptacleCeilingGbps(in: rec) ?? tbBusRecord?.portCeilingGbps
+                let busPhysicalPort: String? = {
+                    if let mapped = tbBusRecord?.physicalPortLabel {
+                        return mapped
+                    }
+                    if let rid = rec?["receptacle_id_key"] as? String,
+                       !rid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let trimmed = rid.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return ioregSnapshot?.socketToPhysicalPort[trimmed]
+                    }
+                    return nil
+                }()
 
                 var busDevices: [AttachedBusDevice] = []
                 if let children = busDict["_items"] as? [[String: Any]] {
                     walkThunderboltDevices(
                         items: children,
                         busTitle: displayTitle,
+                        routerID: routerID,
+                        physicalPort: busPhysicalPort,
                         fallbackSpeedLabel: speedStr,
                         fallbackGbps: negotiatedGbps,
                         ceilingGbps: ceilingGbps,
+                        ioregSnapshot: ioregSnapshot,
                         depth: 0,
                         into: &busDevices
                     )
@@ -167,19 +196,28 @@ public enum BusProfilerCollector {
                     items: items,
                     busTitle: busTitle,
                     controllerCeilingGbps: controllerCeilingGbps,
+                    ancestorPhysicalPort: nil,
+                    ioregSnapshot: ioregSnapshot,
                     behindExternalHub: false,
                     depth: 0,
                     into: &usbDevices
                 )
             }
             let peak = usbDevices.map(\.negotiatedGbps).max() ?? 0.0
+            let resolvedControllerCeiling = controllerCeilingGbps ?? usbDevices.compactMap(\.portCeilingGbps).max()
+            let isControllerCeilingInferred: Bool = {
+                guard controllerCeilingGbps == nil, let maxCeil = resolvedControllerCeiling else { return false }
+                let matching = usbDevices.filter { $0.portCeilingGbps == maxCeil }
+                return !matching.isEmpty && matching.allSatisfy(\.isPortCeilingInferred)
+            }()
             if !usbDevices.isEmpty {
                 controllers.append(
                     PhysicalPortController(
                         id: "usb::\(idx)::\(busTitle)",
                         title: busTitle,
                         protocolKind: .usbHost,
-                        maxGbps: controllerCeilingGbps,
+                        maxGbps: resolvedControllerCeiling,
+                        isMaxGbpsInferred: isControllerCeilingInferred,
                         negotiatedGbps: peak,
                         isConnected: true,
                         devices: usbDevices
@@ -213,19 +251,53 @@ public enum BusProfilerCollector {
     }
 
     public static func collectLiveHostValidated() throws -> BusTopologySnapshot {
-        let out = try runSystemProfilerValidated()
-        let pmset = runPmsetOptional()
-        return try parseSystemProfilerJSONValidated(out, capturedAt: Date(), pmsetOutput: pmset)
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var spResult: Result<Data, Error>?
+        var pmsetOutput: String?
+        var ioregSnapshot: IORegistrySnapshot?
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let res = Result { try runSystemProfilerValidated() }
+            lock.lock()
+            spResult = res
+            lock.unlock()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pm = runPmsetOptional()
+            lock.lock()
+            pmsetOutput = pm
+            lock.unlock()
+            group.leave()
+        }
+
+        group.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let io = IORegistrySnapshot.collectLiveReadOnly()
+            lock.lock()
+            ioregSnapshot = io
+            lock.unlock()
+            group.leave()
+        }
+
+        group.wait()
+        let out = try (spResult ?? .failure(BusCollectorError.systemProfilerFailed(-1))).get()
+        return try parseSystemProfilerJSONValidated(
+            out,
+            capturedAt: Date(),
+            pmsetOutput: pmsetOutput,
+            ioregSnapshot: ioregSnapshot
+        )
     }
 
     // MARK: - Helpers
 
     private static func explicitReceptacleCeilingGbps(in rec: [String: Any]?) -> Double? {
         guard let rec else { return nil }
-        if let maxRaw = (rec["max_speed_key"] as? String) ?? (rec["maximum_speed_key"] as? String) {
-            let val = BottleneckDiagnoser.parseSpeedGbps(maxRaw)
-            if val > 0 { return val }
-        }
         if let curRaw = rec["current_speed_key"] as? String,
            curRaw.lowercased().contains("up to") {
             let val = BottleneckDiagnoser.parseSpeedGbps(curRaw)
@@ -235,10 +307,7 @@ public enum BusProfilerCollector {
     }
 
     private static func explicitUSBControllerCeilingGbps(in usbBus: [String: Any]) -> Double? {
-        if let maxRaw = (usbBus["host_controller_speed"] as? String) ?? (usbBus["max_speed"] as? String) {
-            let val = BottleneckDiagnoser.parseSpeedGbps(maxRaw)
-            if val > 0 { return val }
-        }
+        _ = usbBus
         return nil
     }
 
@@ -248,6 +317,7 @@ public enum BusProfilerCollector {
         index: Int,
         duplicateCount: Int
     ) -> String {
+        // `location_id`: legacy SPUSBDataType key from public samples (e.g. "0x01140000 / 3"); unverified on the author's machine (new SPUSBHostDataType uses `USBKeyLocationID`).
         if let rawLoc = (usbBus["USBKeyLocationID"] as? String) ?? (usbBus["location_id"] as? String),
            let hexLoc = extractHexToken(from: rawLoc) {
             return "\(rawTitle) (\(hexLoc))"
@@ -268,12 +338,22 @@ public enum BusProfilerCollector {
         return String(raw[range]).lowercased()
     }
 
+    private static func extractTrailingInteger(from raw: String) -> Int? {
+        if let last = raw.split(separator: "_").last, let val = Int(last) {
+            return val
+        }
+        return nil
+    }
+
     private static func walkThunderboltDevices(
         items: [[String: Any]],
         busTitle: String,
+        routerID: Int?,
+        physicalPort: String?,
         fallbackSpeedLabel: String?,
         fallbackGbps: Double,
         ceilingGbps: Double?,
+        ioregSnapshot: IORegistrySnapshot?,
         depth: Int,
         into out: inout [AttachedBusDevice]
     ) {
@@ -283,23 +363,33 @@ public enum BusProfilerCollector {
                 ?? "Thunderbolt Device"
             let vendor = (item["vendor_name_key"] as? String) ?? "Unknown vendor"
             let mode = (item["mode_key"] as? String) ?? "thunderbolt_3"
+            let routeStr = item["route_string_key"] as? String
             let rec = findDeviceReceptacle(in: item)
             let itemSpeedStr = rec?["current_speed_key"] as? String
+            let tbRecord = ioregSnapshot?.resolveThunderboltDevice(
+                routerID: routerID,
+                routeString: routeStr,
+                name: name
+            )
             let gbps: Double = {
                 if let itemSpeedStr {
                     let parsed = BottleneckDiagnoser.parseSpeedGbps(itemSpeedStr)
                     if parsed > 0 { return parsed }
                 }
+                if let ioNeg = tbRecord?.negotiatedGbps, ioNeg > 0 {
+                    return ioNeg
+                }
                 return fallbackGbps
             }()
 
-            let eval = BottleneckDiagnoser.evaluateDevice(
-                name: name,
-                vendor: vendor,
+            let capability = tbRecord?.capability
+
+            let eval = BottleneckDiagnoser.evaluate(
                 protocolKind: .thunderboltUSB4,
                 negotiatedGbps: gbps,
                 portCeilingGbps: ceilingGbps,
-                behindHub: depth > 0
+                behindExternalHub: false,
+                capability: capability
             )
 
             out.append(
@@ -308,13 +398,20 @@ public enum BusProfilerCollector {
                     name: name,
                     vendor: vendor,
                     busName: busTitle,
+                    physicalPort: physicalPort,
+                    locationID: routeStr.map { "route:\($0)" },
                     protocolKind: .thunderboltUSB4,
-                    negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
+                    negotiatedSpeedLabel: gbps > 0 ? BottleneckDiagnoser.formatSpeedGbps(gbps) : "Unknown",
                     negotiatedGbps: gbps,
                     portCeilingGbps: ceilingGbps,
+                    deviceMaxGbps: eval.deviceMaxGbps,
                     depth: depth,
                     behindExternalHub: false,
                     modeDescription: mode.replacingOccurrences(of: "_", with: " "),
+                    capability: capability,
+                    bottleneckSegment: eval.bottleneckSegment,
+                    isInferred: eval.isInferred,
+                    isPhysicalPortInferred: physicalPort != nil,
                     verdict: eval.verdict,
                     diagnosticDetail: eval.detail
                 )
@@ -324,9 +421,12 @@ public enum BusProfilerCollector {
                 walkThunderboltDevices(
                     items: nested,
                     busTitle: busTitle,
+                    routerID: routerID,
+                    physicalPort: physicalPort,
                     fallbackSpeedLabel: itemSpeedStr ?? fallbackSpeedLabel,
                     fallbackGbps: gbps,
                     ceilingGbps: ceilingGbps,
+                    ioregSnapshot: ioregSnapshot,
                     depth: depth + 1,
                     into: &out
                 )
@@ -339,23 +439,9 @@ public enum BusProfilerCollector {
            hwType.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("Built-in") == .orderedSame {
             return true
         }
-        if parseBoolFlag(item["Built-in_Device"]) == true || parseBoolFlag(item["built_in"]) == true {
+        // `Built-in_Device`: legacy SPUSBDataType hub item key from public XML samples (value "Yes"); JSON key name unconfirmed and unverified on the author's machine.
+        if parseBoolFlag(item["Built-in_Device"]) == true {
             return true
-        }
-        return false
-    }
-
-    private static func isExplicitUSBHubClass(_ item: [String: Any]) -> Bool {
-        for key in ["bDeviceClass", "USBDeviceKeyDeviceClass", "device_class"] {
-            if let clsInt = item[key] as? Int, clsInt == 9 {
-                return true
-            }
-            if let clsStr = item[key] as? String {
-                let normalized = clsStr.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if normalized == "9" || normalized == "0x09" || normalized == "0x9" || normalized == "hub" {
-                    return true
-                }
-            }
         }
         return false
     }
@@ -364,17 +450,22 @@ public enum BusProfilerCollector {
         items: [[String: Any]],
         busTitle: String,
         controllerCeilingGbps: Double?,
+        ancestorPhysicalPort: String?,
+        ioregSnapshot: IORegistrySnapshot?,
         behindExternalHub: Bool,
+        upstreamHubGbps: Double? = nil,
         depth: Int,
         into out: inout [AttachedBusDevice]
     ) {
         for (idx, item) in items.enumerated() {
             let name = (item["_name"] as? String) ?? "USB Device"
             let vendor: String = {
+                // `manufacturer`: legacy SPUSBDataType key (0 hits in this host's system_profiler JSON; new SPUSBHostDataType uses `USBDeviceKeyVendorName`).
                 if let v = (item["USBDeviceKeyVendorName"] as? String) ?? (item["manufacturer"] as? String),
                    !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return v.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
+                // `vendor_id`: legacy SPUSBDataType key from public samples; unverified on the author's machine (new SPUSBHostDataType uses `USBDeviceKeyVendorID`).
                 if let vid = (item["USBDeviceKeyVendorID"] as? String) ?? (item["vendor_id"] as? String),
                    let hexVid = extractHexToken(from: vid) {
                     return "VID \(hexVid)"
@@ -382,23 +473,54 @@ public enum BusProfilerCollector {
                 return "Unknown vendor"
             }()
 
-            let rawSpeed = (item["USBDeviceKeyLinkSpeed"] as? String)
-                ?? (item["link_speed"] as? String)
-                ?? (item["speed"] as? String)
-                ?? ""
-            let gbps = BottleneckDiagnoser.parseSpeedGbps(rawSpeed)
+            // `location_id`: legacy SPUSBDataType key from public samples (e.g. "0x01140000 / 3"); unverified on the author's machine (new SPUSBHostDataType uses `USBKeyLocationID`).
+            let rawLocStr = (item["USBKeyLocationID"] as? String) ?? (item["location_id"] as? String)
+            let locUInt = IORegistrySnapshot.parseLocationID(rawLocStr)
+            let normalizedLocHex = locUInt.map { String(format: "0x%08x", $0) }
+            let ioregDev = locUInt.flatMap { ioregSnapshot?.usbDevicesByLocation[$0] }
+            let ioregHostPort = locUInt.flatMap { ioregSnapshot?.resolveUSBHostPort(for: $0) }
+
+            let parsedGbps: Double = {
+                if let hostSpeed = item["USBDeviceKeyLinkSpeed"] as? String {
+                    return BottleneckDiagnoser.parseSpeedGbps(hostSpeed)
+                }
+                // `device_speed`: legacy SPUSBDataType key from public samples (values such as `full_speed`, `high_speed`); unverified on the author's machine.
+                if let legacySpeed = item["device_speed"] as? String {
+                    return BottleneckDiagnoser.parseLegacyUSBDeviceSpeedGbps(legacySpeed)
+                }
+                return 0.0
+            }()
+            let gbps = parsedGbps > 0 ? parsedGbps : (ioregDev?.linkSpeedGbps ?? 0.0)
             let children = (item["_items"] as? [[String: Any]]) ?? []
-            let isBuiltIn = isBuiltInUSBNode(item)
-            let isHubContainer = isBuiltIn || isExplicitUSBHubClass(item) || !children.isEmpty
+            let isBuiltIn = isBuiltInUSBNode(item) || (ioregDev?.isInternalPort == true)
+            let mergedCap = ioregDev?.capability
+            let isHubContainer = isBuiltIn || (mergedCap?.usbDeviceClass == 9)
+
+            let resolvedPhysicalPort = ioregDev?.hostPhysicalPortLabel
+                ?? ioregHostPort?.physicalPortLabel
+                ?? ancestorPhysicalPort
+            let (effectivePortCeiling, isPortCeilingInferred): (Double?, Bool) = {
+                if let ctrlCeil = controllerCeilingGbps {
+                    return (ctrlCeil, false)
+                }
+                if let devCeil = ioregDev?.hostPortCeilingGbps {
+                    return (devCeil, ioregDev?.isHostPortCeilingInferred ?? false)
+                }
+                if let portCeil = ioregHostPort?.portCeilingGbps {
+                    return (portCeil, ioregHostPort?.isPortCeilingInferred ?? false)
+                }
+                return (nil, false)
+            }()
 
             if !isHubContainer {
-                let eval = BottleneckDiagnoser.evaluateDevice(
-                    name: name,
-                    vendor: vendor,
+                let eval = BottleneckDiagnoser.evaluate(
                     protocolKind: .usbHost,
                     negotiatedGbps: gbps,
-                    portCeilingGbps: controllerCeilingGbps,
-                    behindHub: behindExternalHub
+                    portCeilingGbps: effectivePortCeiling,
+                    isPortCeilingInferred: isPortCeilingInferred,
+                    behindExternalHub: behindExternalHub,
+                    upstreamHubGbps: upstreamHubGbps,
+                    capability: mergedCap
                 )
                 out.append(
                     AttachedBusDevice(
@@ -406,13 +528,21 @@ public enum BusProfilerCollector {
                         name: name,
                         vendor: vendor,
                         busName: busTitle,
+                        physicalPort: resolvedPhysicalPort,
+                        locationID: normalizedLocHex,
                         protocolKind: .usbHost,
-                        negotiatedSpeedLabel: BottleneckDiagnoser.formatSpeedGbps(gbps),
+                        negotiatedSpeedLabel: gbps > 0 ? BottleneckDiagnoser.formatSpeedGbps(gbps) : "Unknown",
                         negotiatedGbps: gbps,
-                        portCeilingGbps: controllerCeilingGbps,
+                        portCeilingGbps: effectivePortCeiling,
+                        isPortCeilingInferred: isPortCeilingInferred,
+                        deviceMaxGbps: eval.deviceMaxGbps,
+                        upstreamHubGbps: upstreamHubGbps,
                         depth: depth,
                         behindExternalHub: behindExternalHub,
                         modeDescription: behindExternalHub ? "via external USB hub" : "direct host bus",
+                        capability: mergedCap,
+                        bottleneckSegment: eval.bottleneckSegment,
+                        isInferred: eval.isInferred,
                         verdict: eval.verdict,
                         diagnosticDetail: eval.detail
                     )
@@ -422,11 +552,22 @@ public enum BusProfilerCollector {
             if !children.isEmpty {
                 let childBehindExternalHub = behindExternalHub || !isBuiltIn
                 let childDepth = isBuiltIn ? depth : (depth + 1)
+                let childUpstreamHubGbps: Double? = {
+                    if isBuiltIn { return upstreamHubGbps }
+                    guard gbps > 0 else { return upstreamHubGbps }
+                    if let existing = upstreamHubGbps, existing > 0 {
+                        return min(existing, gbps)
+                    }
+                    return gbps
+                }()
                 walkUSBDevices(
                     items: children,
                     busTitle: busTitle,
                     controllerCeilingGbps: controllerCeilingGbps,
+                    ancestorPhysicalPort: resolvedPhysicalPort,
+                    ioregSnapshot: ioregSnapshot,
                     behindExternalHub: childBehindExternalHub,
+                    upstreamHubGbps: childUpstreamHubGbps,
                     depth: childDepth,
                     into: &out
                 )
@@ -440,28 +581,15 @@ public enum BusProfilerCollector {
         var explicitLowPower: Bool?
 
         for entry in powerItems {
+            // `sppower_ac_charger_watts`: present in /System/Library/SystemProfiler/SPPowerReporter.spreporter string table (emitted only on Macs with AC charger information); unverified on the author's machine (absent on this Mac mini).
             if let w = entry["sppower_ac_charger_watts"] as? String, let parsed = Int(w.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 watts = parsed
             } else if let wInt = entry["sppower_ac_charger_watts"] as? Int {
                 watts = wInt
             }
 
-            for topKey in ["LowPowerMode", "sppower_low_power_mode", "lowpowermode"] {
-                if let parsed = parseBoolFlag(entry[topKey]) {
-                    explicitLowPower = parsed
-                }
-            }
-
-            if let battery = entry["Battery Power"] as? [String: Any] {
-                let isCurrent = parseBoolFlag(battery["Current Power Source"]) ?? false
-                if isCurrent {
-                    source = "Battery Power"
-                    if let parsed = extractLowPowerFlag(from: battery) {
-                        explicitLowPower = parsed
-                    }
-                } else if explicitLowPower == nil, let parsed = extractLowPowerFlag(from: battery) {
-                    explicitLowPower = parsed
-                }
+            if let parsed = parseBoolFlag(entry["LowPowerMode"]) {
+                explicitLowPower = parsed
             }
 
             if let ac = entry["AC Power"] as? [String: Any] {
@@ -502,12 +630,7 @@ public enum BusProfilerCollector {
     }
 
     private static func extractLowPowerFlag(from dict: [String: Any]) -> Bool? {
-        for key in ["LowPowerMode", "sppower_low_power_mode", "lowpowermode"] {
-            if let parsed = parseBoolFlag(dict[key]) {
-                return parsed
-            }
-        }
-        return nil
+        parseBoolFlag(dict["LowPowerMode"])
     }
 
     private static func parseBoolFlag(_ raw: Any?) -> Bool? {
@@ -521,9 +644,9 @@ public enum BusProfilerCollector {
         if let s = raw as? String {
             let lower = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             switch lower {
-            case "1", "yes", "true", "on", "enabled", "sppower_low_power_mode_enabled":
+            case "1", "yes", "true", "on", "enabled":
                 return true
-            case "0", "no", "false", "off", "disabled", "sppower_low_power_mode_disabled":
+            case "0", "no", "false", "off", "disabled":
                 return false
             default:
                 return nil

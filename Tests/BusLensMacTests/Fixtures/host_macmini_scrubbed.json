@@ -1,4 +1,15 @@
 {
+  "_capture_metadata": {
+    "captured_at_utc": "2026-11-14 (committed in db0c7a5 at 2026-11-14T04:08:15Z; exact capture second was not recorded during M0)",
+    "command": "/usr/sbin/system_profiler SPThunderboltDataType SPUSBHostDataType SPUSBDataType SPPowerDataType -json",
+    "removed_keys": [
+      "USBDeviceKeySerialNumber",
+      "domain_uuid_key",
+      "switch_uid_key"
+    ],
+    "scrub_script": "Scripts/scrub-ioreg.py",
+    "synthetic_entries_added": 0
+  },
   "SPPowerDataType": [
     {
       "AC Power": {

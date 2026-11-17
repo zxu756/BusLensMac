@@ -86,6 +86,29 @@ case "$MODE" in
                     fi
                 fi
                 ;;
+            1)
+                echo "==> [M1] Running scoped unit tests (Diagnoser, Collector, CLI, BusLensMacCoreTests)..."
+                swift test --no-parallel \
+                    --filter Diagnoser \
+                    --filter Collector \
+                    --filter CLI \
+                    --filter BusLensMacCoreTests
+                echo "==> [M1] Running M1 differential & capability acceptance checks..."
+                if [[ "$RECORD" -eq 1 ]]; then
+                    "$ROOT/Scripts/acceptance/m1-differential.sh" | scrub_and_write "$ROOT/reports/m1-acceptance.txt"
+                else
+                    "$ROOT/Scripts/acceptance/m1-differential.sh"
+                fi
+                if [[ "${BUSLENS_SKIP_README_REPLAY:-0}" != "1" && -x "$ROOT/Scripts/acceptance/readme-commands.sh" ]]; then
+                    echo "==> [M1] Verifying README commands..."
+                    if [[ "$RECORD" -eq 1 ]]; then
+                        BUSLENS_IN_MILESTONE=1 "$ROOT/Scripts/acceptance/readme-commands.sh" \
+                            | scrub_and_write "$ROOT/reports/readme-commands.txt"
+                    else
+                        BUSLENS_IN_MILESTONE=1 "$ROOT/Scripts/acceptance/readme-commands.sh"
+                    fi
+                fi
+                ;;
             *)
                 SCRIPT="$ROOT/Scripts/acceptance/m${MS}-acceptance.sh"
                 if [[ ! -x "$SCRIPT" ]]; then
@@ -105,6 +128,9 @@ case "$MODE" in
         echo "==> [Release] Running M0 acceptance gate (50x CLI runs + bilingual checks)..."
         BUSLENS_BIN="$ROOT/build/BusLensMac.app/Contents/MacOS/BusLensMac" \
             "$ROOT/Scripts/acceptance/m0-acceptance.sh" | scrub_and_write "$ROOT/reports/m0-acceptance.txt"
+        echo "==> [Release] Running M1 differential & capability acceptance gate..."
+        BUSLENS_BIN="$ROOT/build/BusLensMac.app/Contents/MacOS/BusLensMac" \
+            "$ROOT/Scripts/acceptance/m1-differential.sh" | scrub_and_write "$ROOT/reports/m1-acceptance.txt"
         echo "==> [Release] Replaying README commands..."
         BUSLENS_BIN="$ROOT/build/BusLensMac.app/Contents/MacOS/BusLensMac" \
             BUSLENS_IN_MILESTONE=1 "$ROOT/Scripts/acceptance/readme-commands.sh" \

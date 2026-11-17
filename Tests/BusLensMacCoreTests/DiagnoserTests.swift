@@ -96,7 +96,7 @@ struct DiagnoserTests {
         }
     }
 
-    @Test("U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', and 'Wooting 60HE' on 10 Gb/s bus are Indeterminate; only 1.5 Mb/s and 12 Mb/s USB 1.x links are Low-speed peripheral")
+    @Test("U9: 480 Mb/s 'Groups Backup Drive', 'Hidden Disk', and 'Wooting 60HE' without descriptors are Indeterminate; only verified HID class 3 at 1.5/12 Mb/s is HID peripheral")
     @MainActor
     func testNoNameGuessingForBackupDrivesAndKeyboardsAt480Mbps() throws {
         let json = """
@@ -104,39 +104,58 @@ struct DiagnoserTests {
           "SPUSBDataType": [
             {
               "_name": "USB 3.1 Bus",
-              "host_controller_speed": "Up to 10 Gb/s",
               "_items": [
                 {
                   "_name": "Groups Backup Drive",
                   "manufacturer": "Acme Storage",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "Hidden Disk",
                   "manufacturer": "Acme Storage",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
                   "_name": "Wooting 60HE",
                   "manufacturer": "Wooting",
-                  "speed": "Up to 480 Mb/s"
+                  "device_speed": "high_speed"
                 },
                 {
-                  "_name": "USB 1.0 Device",
+                  "_name": "USB 1.0 HID Keypad",
+                  "location_id": "0x01140000",
                   "manufacturer": "Generic",
-                  "speed": "Up to 1.5 Mb/s"
+                  "device_speed": "low_speed"
                 },
                 {
-                  "_name": "USB 1.1 Receiver",
+                  "_name": "USB 1.1 Unclassified Device",
                   "manufacturer": "Generic",
-                  "speed": "Up to 12 Mb/s"
+                  "device_speed": "full_speed"
                 }
               ]
             }
           ]
         }
         """
-        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8))
+        let u9IORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x01140000,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01140000,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let u9Plist = try PropertyListSerialization.data(fromPropertyList: u9IORegDict, format: .xml, options: 0)
+        let u9IOReg = try IORegistrySnapshot.parsePlistData(u9Plist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(json.utf8), ioregSnapshot: u9IOReg)
         #expect(snap.devices.count == 5)
 
         let en = AppLocalizer(fixedLanguage: .en)
@@ -145,29 +164,27 @@ struct DiagnoserTests {
         for name in ["Groups Backup Drive", "Hidden Disk", "Wooting 60HE"] {
             let dev = try #require(snap.devices.first { $0.name == name })
             #expect(dev.negotiatedSpeedLabel == "480 Mb/s")
-            #expect(dev.portCeilingGbps == 10.0)
+            #expect(dev.portCeilingGbps == nil)
             #expect(dev.verdict == .indeterminate)
             #expect(dev.verdict.localizedLabel(en) == "Indeterminate")
             #expect(dev.verdict.localizedLabel(zh) == "无法判断是否被限速")
             #expect(dev.localizedDiagnosticDetail(zh).contains("无法判断"))
         }
 
-        let usb1Low = try #require(snap.devices.first { $0.name == "USB 1.0 Device" })
-        #expect(usb1Low.negotiatedGbps == 0.0015)
-        #expect(usb1Low.negotiatedSpeedLabel == "1.5 Mb/s")
-        #expect(usb1Low.verdict == .lowSpeedPeripheral)
-        #expect(usb1Low.verdict.localizedLabel(en) == "Low-speed peripheral")
-        #expect(usb1Low.verdict.localizedLabel(zh).contains("低速外设"))
+        let usb1LowHID = try #require(snap.devices.first { $0.name == "USB 1.0 HID Keypad" })
+        #expect(usb1LowHID.negotiatedGbps == 0.0015)
+        #expect(usb1LowHID.negotiatedSpeedLabel == "1.5 Mb/s")
+        #expect(usb1LowHID.verdict == .lowSpeedPeripheral)
+        #expect(usb1LowHID.verdict.localizedLabel(en) == "HID peripheral")
+        #expect(usb1LowHID.verdict.localizedLabel(zh) == "HID / 低速外设")
 
-        let usb1Full = try #require(snap.devices.first { $0.name == "USB 1.1 Receiver" })
-        #expect(usb1Full.negotiatedGbps == 0.012)
-        #expect(usb1Full.negotiatedSpeedLabel == "12 Mb/s")
-        #expect(usb1Full.verdict == .lowSpeedPeripheral)
-        #expect(usb1Full.verdict.localizedLabel(en) == "Low-speed peripheral")
-        #expect(usb1Full.verdict.localizedLabel(zh).contains("低速外设"))
+        let usb1Unclassified = try #require(snap.devices.first { $0.name == "USB 1.1 Unclassified Device" })
+        #expect(usb1Unclassified.negotiatedGbps == 0.012)
+        #expect(usb1Unclassified.negotiatedSpeedLabel == "12 Mb/s")
+        #expect(usb1Unclassified.verdict == .indeterminate)
     }
 
-    @Test("U2 & U9: Only the 3 honest M0 verdicts exist across Full-rate TB, USB 1.x Low-speed peripheral, and Indeterminate links")
+    @Test("U2, U9 & U14: Without capability descriptors, non-ceiling links are Indeterminate; verified HID class 3 is HID peripheral")
     @MainActor
     func testThreeHonestVerdictsInEnglishAndChinese() {
         let en = AppLocalizer(fixedLanguage: .en)
@@ -205,22 +222,1080 @@ struct DiagnoserTests {
         )
         #expect(usb2Keyboard.verdict == .indeterminate)
 
-        let usb1Items: [(String, String, Double)] = [
-            ("Generic Low-Speed Device", "Vendor", 0.0015),
-            ("Generic Full-Speed Device", "Vendor", 0.012)
-        ]
-        for (name, vendor, gbps) in usb1Items {
+        let hidCap = DeviceCapabilityDescriptor(bcdUSB: 0x0200, usbDeviceClass: 0, usbInterfaceClasses: [3])
+        for gbps in [0.0015, 0.012] {
             let res = BottleneckDiagnoser.evaluateDevice(
-                name: name,
-                vendor: vendor,
+                name: "Generic HID",
+                vendor: "Vendor",
                 protocolKind: .usbHost,
                 negotiatedGbps: gbps,
                 portCeilingGbps: nil,
-                behindHub: false
+                behindHub: false,
+                capability: hidCap
             )
             #expect(res.verdict == .lowSpeedPeripheral)
-            #expect(res.verdict.localizedLabel(en) == "Low-speed peripheral")
-            #expect(res.verdict.localizedLabel(zh) == "低速外设（USB 1.x）")
+            #expect(res.verdict.localizedLabel(en) == "HID peripheral")
+            #expect(res.verdict.localizedLabel(zh) == "HID / 低速外设")
         }
+    }
+
+    @Test("U14: 12 Mb/s Mass Storage disk (bInterfaceClass == 8) is never mislabeled HID / Low-speed peripheral; only verified HID (class == 3) gets HID peripheral label")
+    @MainActor
+    func testU14TwelveMbpsMassStorageIsNeverLabeledLowSpeedPeripheral() throws {
+        let syntheticMassStorage12M = """
+        {
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "_items": [
+                {
+                  "_name": "ThumbDrive NoDesc",
+                  "USBKeyLocationID": "0x01110000",
+                  "USBDeviceKeyVendorName": "Generic",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
+                },
+                {
+                  "_name": "ThumbDrive USB3At12M",
+                  "USBKeyLocationID": "0x01120000",
+                  "USBDeviceKeyVendorName": "Generic",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
+                },
+                {
+                  "_name": "Optical Mouse",
+                  "USBKeyLocationID": "0x01130000",
+                  "USBDeviceKeyVendorName": "Generic",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s"
+                }
+              ]
+            }
+          ]
+        }
+        """
+        let u14IORegDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x01100000,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]
+                            ]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01120000,
+                            "bcdUSB": 0x0210,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]
+                            ]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01130000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [
+                                ["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let u14Plist = try PropertyListSerialization.data(fromPropertyList: u14IORegDict, format: .xml, options: 0)
+        let u14IOReg = try IORegistrySnapshot.parsePlistData(u14Plist)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticMassStorage12M.utf8), ioregSnapshot: u14IOReg)
+        let diskNoDesc = try #require(snap.devices.first { $0.name == "ThumbDrive NoDesc" })
+        #expect(diskNoDesc.negotiatedSpeedLabel == "12 Mb/s")
+        #expect(diskNoDesc.verdict == .indeterminate)
+
+        let diskUSB3 = try #require(snap.devices.first { $0.name == "ThumbDrive USB3At12M" })
+        #expect(diskUSB3.negotiatedSpeedLabel == "12 Mb/s")
+        #expect(diskUSB3.verdict == .throttled)
+        #expect(diskUSB3.bottleneckSegment == .cableOrPortIndeterminate)
+
+        let mouse = try #require(snap.devices.first { $0.name == "Optical Mouse" })
+        #expect(mouse.negotiatedSpeedLabel == "12 Mb/s")
+        #expect(mouse.verdict == .lowSpeedPeripheral)
+    }
+
+    @Test("M1 Row 4: All 16 synthetic hardware scenarios paired with ioreg XML descriptors match expected verdicts and cable/hub/port bottleneck segments in EN & ZH")
+    @MainActor
+    func testM1SixteenSyntheticScenariosWithIORegistryDescriptors() throws {
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "OWC Envoy NVMe",
+                  "device_name_key": "OWC Envoy NVMe",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "receptacle_1_tag": {
+                "current_speed_key": "Up to 40 Gb/s",
+                "receptacle_id_key": "2",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "USB4 Hub NVMe",
+                  "device_name_key": "USB4 Hub NVMe",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "usb4",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "40 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  },
+                  "_items": [
+                    {
+                      "_name": "Samsung X5",
+                      "device_name_key": "Samsung X5",
+                      "vendor_name_key": "Acme",
+                      "mode_key": "thunderbolt_three",
+                      "route_string_key": "301",
+                      "receptacle_upstream_ambiguous_tag": {
+                        "current_speed_key": "20 Gb/s",
+                        "receptacle_status_key": "receptacle_connected"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_2",
+              "receptacle_1_tag": {
+                "current_speed_key": "Up to 80 Gb/s",
+                "receptacle_id_key": "3",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TB5 Dock",
+                  "device_name_key": "TB5 Dock",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "usb4",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "80 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                { "_name": "ASM2464PD 480M", "USBKeyLocationID": "0x01110000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "ASMedia" },
+                { "_name": "ASM2464PD 10G", "USBKeyLocationID": "0x01210000", "USBDeviceKeyLinkSpeed": "10 Gb/s", "USBDeviceKeyVendorName": "ASMedia" },
+                { "_name": "Wooting 60HE", "USBKeyLocationID": "0x01120000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Wooting" },
+                { "_name": "USB Optical Mouse", "USBKeyLocationID": "0x01130000", "USBDeviceKeyLinkSpeed": "12 Mb/s", "USBDeviceKeyVendorName": "Vendor" },
+                { "_name": "2.4G Wireless Receiver", "USBKeyLocationID": "0x01140000", "USBDeviceKeyLinkSpeed": "12 Mb/s", "USBDeviceKeyVendorName": "Vendor" },
+                { "_name": "Logitech Unifying Receiver", "USBKeyLocationID": "0x01150000", "USBDeviceKeyLinkSpeed": "12 Mb/s", "USBDeviceKeyVendorName": "Logitech" },
+                { "_name": "USB DISK 2.0", "USBKeyLocationID": "0x01160000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Kingston" },
+                { "_name": "My Passport 25E2", "USBKeyLocationID": "0x01170000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Western Digital" },
+                { "_name": "SanDisk Extreme PRO USB2 Drive", "USBKeyLocationID": "0x01180000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "SanDisk" },
+                {
+                  "_name": "External USB2 Hub",
+                  "USBKeyLocationID": "0x01190000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Generic",
+                  "_items": [
+                    { "_name": "Portable SSD T7 Behind USB2 Hub", "USBKeyLocationID": "0x01191000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Samsung" }
+                  ]
+                },
+                { "_name": "Portable SSD T7 Native 10G", "USBKeyLocationID": "0x01220000", "USBDeviceKeyLinkSpeed": "10 Gb/s", "USBDeviceKeyVendorName": "Samsung" },
+                { "_name": "Samsung T5", "USBKeyLocationID": "0x01230000", "USBDeviceKeyLinkSpeed": "5 Gb/s", "USBDeviceKeyVendorName": "Samsung" },
+                { "_name": "CalDigit TS4 Dock", "USBKeyLocationID": "0x011a0000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "CalDigit" },
+                {
+                  "_name": "External USB3 Gen2 Hub",
+                  "USBKeyLocationID": "0x01240000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Genesys",
+                  "_items": [
+                    { "_name": "Elements SE", "USBKeyLocationID": "0x01241000", "USBDeviceKeyLinkSpeed": "5 Gb/s", "USBDeviceKeyVendorName": "WD" }
+                  ]
+                },
+                { "_name": "SuperSpeed Drive On USB2 Host Port", "USBKeyLocationID": "0x04100000", "USBDeviceKeyLinkSpeed": "480 Mb/s", "USBDeviceKeyVendorName": "Acme" }
+              ]
+            }
+          ]
+        }
+        """
+
+        let ioregDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                // USB-C Port 1..10 with USB 3.x companion (10 Gb/s ceiling)
+                [
+                    "IOObjectClass": "AppleUSB20XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (2.0)": true,
+                    "UsbProtocolCompanion (3.x)": "IOService:/usb-ss@01200000",
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01110000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01120000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01130000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01140000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01150000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 3]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01160000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01170000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01180000, "bcdUSB": 0x0200, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01190000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 9,
+                            "USBPortType": 0,
+                            "UsbLinkSpeed": 480_000_000,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "AppleUSB20HubPort",
+                                    "locationID": 0x01191000,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01191000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                                    ]
+                                ]
+                            ]
+                        ],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x011a0000, "bcdUSB": 0x0201, "bDeviceClass": 17]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01200000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01210000, "bcdUSB": 0x0320, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01220000, "bcdUSB": 0x0310, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01230000, "bcdUSB": 0x0300, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01240000,
+                            "bcdUSB": 0x0320,
+                            "bDeviceClass": 9,
+                            "USBPortType": 0,
+                            "UsbLinkSpeed": 10_000_000_000,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "AppleUSB30HubPort",
+                                    "locationID": 0x01241000,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x01241000, "bcdUSB": 0x0300, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                // Dedicated USB 2.0-only physical port (no 3.x companion -> 480 Mb/s port ceiling)
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x04100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-A@1",
+                    "UsbProtocol (2.0)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x04100000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Current Link Speed": 8,
+                            "Current Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Current Link Speed": 8,
+                                    "Current Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType3",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "OWC Envoy NVMe"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 1,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "2",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Current Link Speed": 4,
+                            "Current Link Width": 2,
+                            "Link Bandwidth": 400,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Current Link Speed": 4,
+                                    "Current Link Width": 2,
+                                    "Link Bandwidth": 400,
+                                    "IORegistryEntryChildren": [
+                                        [
+                                            "IOObjectClass": "IOThunderboltSwitchType5",
+                                            "Depth": 1,
+                                            "Route String": 1,
+                                            "Device Model Name": "USB4 Hub NVMe",
+                                            "IORegistryEntryChildren": [
+                                                [
+                                                    "IOObjectClass": "IOThunderboltPort",
+                                                    "Supported Link Speed": 12,
+                                                    "Supported Link Width": 2,
+                                                    "Current Link Speed": 8,
+                                                    "Current Link Width": 2,
+                                                    "Link Bandwidth": 200,
+                                                    "IORegistryEntryChildren": [
+                                                        [
+                                                            "IOObjectClass": "IOThunderboltPort",
+                                                            "Supported Link Speed": 12,
+                                                            "Supported Link Width": 2,
+                                                            "Current Link Speed": 8,
+                                                            "Current Link Width": 2,
+                                                            "Link Bandwidth": 200,
+                                                            "IORegistryEntryChildren": [
+                                                                [
+                                                                    "IOObjectClass": "IOThunderboltSwitchType3",
+                                                                    "Depth": 2,
+                                                                    "Route String": "301",
+                                                                    "Device Model Name": "Samsung X5"
+                                                                ]
+                                                            ]
+                                                        ]
+                                                    ]
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: ioregDict, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+
+        // External Class-9 USB2 & USB3 hubs must be hidden as hub containers
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+        #expect(byName["External USB2 Hub"] == nil)
+        #expect(byName["External USB3 Gen2 Hub"] == nil)
+
+        // 1. ASM2464PD 480M (bcdUSB 0x0210 on USB-C port with unknown ceiling) -> Throttled (cannot determine if cable or port)
+        #expect(byName["ASM2464PD 480M"]?.verdict == .throttled)
+        #expect(byName["ASM2464PD 480M"]?.bottleneckSegment == .cableOrPortIndeterminate)
+        // 2. ASM2464PD 10G (bcdUSB 0x0320 without SSP sublink attribute) -> Indeterminate
+        #expect(byName["ASM2464PD 10G"]?.verdict == .indeterminate)
+        // 3. Wooting 60HE (bcdUSB 0x0200 at 480M) -> Normal
+        #expect(byName["Wooting 60HE"]?.verdict == .normal)
+        // 4-6. 12 Mb/s HID Class 3 peripherals -> HID peripheral
+        #expect(byName["USB Optical Mouse"]?.verdict == .lowSpeedPeripheral)
+        #expect(byName["2.4G Wireless Receiver"]?.verdict == .lowSpeedPeripheral)
+        #expect(byName["Logitech Unifying Receiver"]?.verdict == .lowSpeedPeripheral)
+        // 7. USB DISK 2.0 (bcdUSB 0x0200 at 480M) -> Normal
+        #expect(byName["USB DISK 2.0"]?.verdict == .normal)
+        // 8. My Passport 25E2 (bcdUSB 0x0210 at 480M on USB-C port with unknown ceiling) -> Throttled (cannot determine if cable or port)
+        #expect(byName["My Passport 25E2"]?.verdict == .throttled)
+        #expect(byName["My Passport 25E2"]?.bottleneckSegment == .cableOrPortIndeterminate)
+        // 9. SanDisk Extreme PRO USB2 Drive (bcdUSB 0x0200 at 480M) -> Normal (never keyword-guessed!)
+        #expect(byName["SanDisk Extreme PRO USB2 Drive"]?.verdict == .normal)
+        // 10. Portable SSD T7 Behind USB2 Hub -> Throttled (hub)
+        #expect(byName["Portable SSD T7 Behind USB2 Hub"]?.verdict == .throttled)
+        #expect(byName["Portable SSD T7 Behind USB2 Hub"]?.bottleneckSegment == .hub)
+        // 11. Portable SSD T7 Native 10G (bcdUSB 0x0310 at 10G) -> Normal
+        #expect(byName["Portable SSD T7 Native 10G"]?.verdict == .normal)
+        // 12. Samsung T5 (bcdUSB 0x0300 at 5G) -> Normal
+        #expect(byName["Samsung T5"]?.verdict == .normal)
+        // 13. CalDigit TS4 Dock (bDeviceClass 17 Billboard at 480M) -> Normal
+        #expect(byName["CalDigit TS4 Dock"]?.verdict == .normal)
+        // 14. Elements SE (bcdUSB 0x0300 at 5G behind 10G hub) -> Normal
+        #expect(byName["Elements SE"]?.verdict == .normal)
+        // 15. OWC Envoy NVMe (40G TB3 switch at 20G on 40G bus) -> Throttled (cable)
+        #expect(byName["OWC Envoy NVMe"]?.verdict == .throttled)
+        #expect(byName["OWC Envoy NVMe"]?.bottleneckSegment == .cable)
+        // 16. Daisy-chained USB4 Hub NVMe (40G -> fullRate) + Samsung X5 (40G capable at 20G -> Throttled cable)
+        #expect(byName["USB4 Hub NVMe"]?.verdict == .fullRate)
+        #expect(byName["USB4 Hub NVMe"]?.negotiatedGbps == 40.0)
+        #expect(byName["Samsung X5"]?.verdict == .throttled)
+        #expect(byName["Samsung X5"]?.negotiatedGbps == 20.0)
+        #expect(byName["Samsung X5"]?.bottleneckSegment == .cable)
+        // Extra: SuperSpeed Drive On USB2 Host Port (bcdUSB 0x0210 on 480M port) -> Throttled (port)
+        #expect(byName["SuperSpeed Drive On USB2 Host Port"]?.verdict == .throttled)
+        #expect(byName["SuperSpeed Drive On USB2 Host Port"]?.bottleneckSegment == .port)
+        // Extra: TB5 Dock (80G on 80G bus) -> Full bus rate
+        #expect(byName["TB5 Dock"]?.verdict == .fullRate)
+
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+        #expect(byName["ASM2464PD 480M"]?.localizedDiagnosticDetail(zh).contains("无法判断是线还是口") == true)
+        #expect(byName["OWC Envoy NVMe"]?.localizedDiagnosticDetail(zh).contains("线缆限速") == true)
+        #expect(byName["Portable SSD T7 Behind USB2 Hub"]?.localizedDiagnosticDetail(zh).contains("集线器限速") == true)
+        #expect(byName["SuperSpeed Drive On USB2 Host Port"]?.localizedDiagnosticDetail(zh).contains("端口限速") == true)
+    }
+
+    @Test("M1 Row 4 (Pure system_profiler without ioreg): All 14 raw harness JSON cases never guess by product name and return Indeterminate or FullRate")
+    func testM1FourteenRawSystemProfilerHarnessCasesWithoutIOReg() throws {
+        let rawCases: [(String, String, [(String, Double, LinkHealthVerdict)])] = [
+            ("c1_nvme_480", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"ASM2464PD NVMe Enclosure","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"ASMedia"}]}]}"#, [("ASM2464PD NVMe Enclosure", 0.48, .indeterminate)]),
+            ("c2_nvme_10G", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"ASM2464PD NVMe Enclosure","USBDeviceKeyLinkSpeed":"10 Gb/s","USBDeviceKeyVendorName":"ASMedia"}]}]}"#, [("ASM2464PD NVMe Enclosure", 10.0, .indeterminate)]),
+            ("c3_hid", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"Wooting 60HE","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"Wooting"},{"_name":"USB Optical Mouse","USBDeviceKeyLinkSpeed":"12 Mb/s","USBDeviceKeyVendorName":"Vendor"},{"_name":"2.4G Wireless Receiver","USBDeviceKeyLinkSpeed":"12 Mb/s","USBDeviceKeyVendorName":"Vendor"},{"_name":"Logitech Unifying Receiver","USBDeviceKeyLinkSpeed":"12 Mb/s","USBDeviceKeyVendorName":"Logitech"}]}]}"#, [
+                ("Wooting 60HE", 0.48, .indeterminate),
+                ("USB Optical Mouse", 0.012, .indeterminate),
+                ("2.4G Wireless Receiver", 0.012, .indeterminate),
+                ("Logitech Unifying Receiver", 0.012, .indeterminate),
+            ]),
+            ("c4_usbdisk2", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"USB DISK 2.0","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"Kingston"},{"_name":"My Passport 25E2","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"Western Digital"},{"_name":"SanDisk Extreme PRO USB2 Drive","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"SanDisk"}]}]}"#, [
+                ("USB DISK 2.0", 0.48, .indeterminate),
+                ("My Passport 25E2", 0.48, .indeterminate),
+                ("SanDisk Extreme PRO USB2 Drive", 0.48, .indeterminate),
+            ]),
+            ("c5_behind_usb2hub", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"USB2 Hub","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"Apple","_items":[{"_name":"Portable SSD T7","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"Samsung"}]}]}]}"#, [
+                ("USB2 Hub", 0.48, .indeterminate),
+                ("Portable SSD T7", 0.48, .indeterminate),
+            ]),
+            ("c6_t7_native10", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"Portable SSD T7","USBDeviceKeyLinkSpeed":"10 Gb/s","USBDeviceKeyVendorName":"Samsung"},{"_name":"Samsung T5","USBDeviceKeyLinkSpeed":"5 Gb/s","USBDeviceKeyVendorName":"Samsung"}]}]}"#, [
+                ("Portable SSD T7", 10.0, .indeterminate),
+                ("Samsung T5", 5.0, .indeterminate),
+            ]),
+            ("c7_dock", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus","_items":[{"_name":"CalDigit TS4 Dock","USBDeviceKeyLinkSpeed":"480 Mb/s","USBDeviceKeyVendorName":"CalDigit"},{"_name":"USB3 Gen2 Hub","USBDeviceKeyLinkSpeed":"10 Gb/s","USBDeviceKeyVendorName":"Genesys","_items":[{"_name":"Elements SE","USBDeviceKeyLinkSpeed":"5 Gb/s","USBDeviceKeyVendorName":"WD"}]}]}]}"#, [
+                ("CalDigit TS4 Dock", 0.48, .indeterminate),
+                ("USB3 Gen2 Hub", 10.0, .indeterminate),
+                ("Elements SE", 5.0, .indeterminate),
+            ]),
+            ("e1_empty", #"{"SPUSBHostDataType":[{"_name":"USB 3.1 Bus"}],"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"Up to 40 Gb/s","receptacle_status_key":"receptacle_no_devices_connected"}}],"SPPowerDataType":[]}"#, []),
+            ("l1_legacy_nvme_480", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"NVMe Enclosure","manufacturer":"Acme","device_speed":"high_speed","serial_num":"LEGACYSER1","vendor_id":"0x1234"}]}]}"#, [
+                ("NVMe Enclosure", 0.48, .indeterminate)
+            ]),
+            ("l2_legacy_nvme_10G_hub_kb", #"{"SPUSBDataType":[{"_name":"USB31Bus","host_controller":"AppleT8103USBXHCI","_items":[{"_name":"4-Port USB 3.0 Hub","device_speed":"super_speed","_items":[{"_name":"Portable SSD","manufacturer":"Acme","device_speed":"super_speed_plus"},{"_name":"Apple Keyboard","device_speed":"full_speed"}]}]}]}"#, [
+                ("4-Port USB 3.0 Hub", 5.0, .indeterminate),
+                ("Portable SSD", 10.0, .indeterminate),
+                ("Apple Keyboard", 0.012, .indeterminate),
+            ]),
+            ("t1_tb_dev_20G_on_40bus", #"{"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"40 Gb/s","receptacle_status_key":"receptacle_connected"},"_items":[{"_name":"OWC Envoy NVMe","device_name_key":"OWC Envoy NVMe","vendor_name_key":"Acme","mode_key":"thunderbolt_three","receptacle_upstream_ambiguous_tag":{"current_speed_key":"20 Gb/s","receptacle_status_key":"receptacle_connected"}}]}]}"#, [
+                ("OWC Envoy NVMe", 20.0, .indeterminate)
+            ]),
+            ("t2_tb5_80", #"{"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"Up to 80 Gb/s","receptacle_status_key":"receptacle_connected"},"_items":[{"_name":"TB5 Dock","device_name_key":"TB5 Dock","vendor_name_key":"Acme","mode_key":"usb4","receptacle_upstream_ambiguous_tag":{"current_speed_key":"80 Gb/s","receptacle_status_key":"receptacle_connected"}}]}]}"#, [
+                ("TB5 Dock", 80.0, .fullRate)
+            ]),
+            ("t3_usb4_and_daisy", #"{"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"40 Gb/s","receptacle_status_key":"receptacle_connected"},"_items":[{"_name":"USB4 Hub NVMe","device_name_key":"USB4 Hub NVMe","vendor_name_key":"Acme","mode_key":"usb4","receptacle_upstream_ambiguous_tag":{"current_speed_key":"40 Gb/s","receptacle_status_key":"receptacle_connected"},"_items":[{"_name":"Samsung X5","device_name_key":"Samsung X5","vendor_name_key":"Acme","mode_key":"thunderbolt_three","receptacle_upstream_ambiguous_tag":{"current_speed_key":"20 Gb/s","receptacle_status_key":"receptacle_connected"}}]}]}]}"#, [
+                ("USB4 Hub NVMe", 40.0, .fullRate),
+                ("Samsung X5", 20.0, .indeterminate),
+            ]),
+            ("t4_tb_dev_nospeed_on_10bus", #"{"SPThunderboltDataType":[{"_name":"thunderboltusb4_bus_0","receptacle_1_tag":{"current_speed_key":"10 Gb/s","receptacle_status_key":"receptacle_connected"},"_items":[{"_name":"Generic Display","device_name_key":"Generic Display","vendor_name_key":"X","mode_key":"usb4"}]}]}"#, [
+                ("Generic Display", 10.0, .indeterminate)
+            ]),
+        ]
+
+        for (caseID, jsonStr, expected) in rawCases {
+            let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(jsonStr.utf8))
+            #expect(snap.devices.count == expected.count, "Mismatch count for \(caseID)")
+            for (idx, (expName, expGbps, expVerdict)) in expected.enumerated() where idx < snap.devices.count {
+                #expect(snap.devices[idx].name == expName, "\(caseID)[\(idx)] name")
+                #expect(abs(snap.devices[idx].negotiatedGbps - expGbps) < 0.0001, "\(caseID)[\(idx)] speed")
+                #expect(snap.devices[idx].verdict == expVerdict, "\(caseID)[\(idx)] verdict")
+            }
+        }
+    }
+
+    @Test("UR1: Unverified keys absent from real host ioreg/system_profiler (UsbDeviceMaxSpeedGbps, SuperSpeedPlusMaxSpeedGbps, Usb3LinkPreferred, hasDeviceQualifier, UsbBillboardAltModeFailed, UsbHostPortLinkSpeedLimit, MaxSpeedGbps, device_max_speed) do not affect collection or diagnostics")
+    @MainActor
+    func testUR1UnverifiedKeysAreIgnored() throws {
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "40 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TB_MaxSpeedGbps_Only",
+                  "device_name_key": "TB_MaxSpeedGbps_Only",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                },
+                {
+                  "_name": "TB_device_max_speed_Only",
+                  "device_name_key": "TB_device_max_speed_Only",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "9",
+                  "device_max_speed": "40 Gb/s",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 3.1 Bus",
+              "USBKeyLocationID": "0x01000000",
+              "_items": [
+                {
+                  "_name": "USB_IOReg_UsbDeviceMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01110000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB_Inline_UsbDeviceMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01120000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "UsbDeviceMaxSpeedGbps": 20
+                },
+                {
+                  "_name": "USB_SuperSpeedPlusMaxSpeedGbps",
+                  "USBKeyLocationID": "0x01130000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB_device_max_speed",
+                  "USBKeyLocationID": "0x01140000",
+                  "USBDeviceKeyLinkSpeed": "10 Gb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "device_max_speed": "20 Gb/s"
+                },
+                {
+                  "_name": "USB_Usb3LinkPreferred",
+                  "USBKeyLocationID": "0x01150000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "Usb3LinkPreferred": true
+                },
+                {
+                  "_name": "USB_hasDeviceQualifier",
+                  "USBKeyLocationID": "0x01160000",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "hasDeviceQualifier": true
+                },
+                {
+                  "_name": "USB_UsbBillboardAltModeFailed",
+                  "USBKeyLocationID": "0x01170000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme",
+                  "UsbBillboardAltModeFailed": true
+                },
+                {
+                  "_name": "USB_PortLimit_Only",
+                  "USBKeyLocationID": "0x02110000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        let ioregDict: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x01100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@1",
+                    "UsbProtocol (3.x)": true,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01110000,
+                            "bcdUSB": 0x0320,
+                            "bDeviceClass": 0,
+                            "UsbDeviceMaxSpeedGbps": 20,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01130000,
+                            "bcdUSB": 0x0320,
+                            "bDeviceClass": 0,
+                            "SuperSpeedPlusMaxSpeedGbps": 20,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01150000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "Usb3LinkPreferred": true,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01160000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "hasDeviceQualifier": true,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ],
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x01170000,
+                            "bcdUSB": 0x0201,
+                            "bDeviceClass": 17,
+                            "UsbBillboardAltModeFailed": true
+                        ]
+                    ]
+                ],
+                [
+                    "IOObjectClass": "AppleUSB30XHCIARMPort",
+                    "locationID": 0x02100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-C@2",
+                    "UsbHostPortLinkSpeedLimit": 5,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOUSBHostDevice",
+                            "locationID": 0x02110000,
+                            "bcdUSB": 0x0200,
+                            "bDeviceClass": 0,
+                            "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]
+                        ]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltSwitchType3",
+                                    "Depth": 1,
+                                    "Route String": 1,
+                                    "Device Model Name": "TB_MaxSpeedGbps_Only",
+                                    "MaxSpeedGbps": 40
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: ioregDict, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        // 1. MaxSpeedGbps (TB ioreg)
+        let tbMaxKeyDev = try #require(byName["TB_MaxSpeedGbps_Only"])
+        #expect(tbMaxKeyDev.deviceMaxGbps == nil)
+        #expect(tbMaxKeyDev.verdict == .indeterminate)
+
+        // 2. device_max_speed (TB & USB SP JSON)
+        let tbSpMaxDev = try #require(byName["TB_device_max_speed_Only"])
+        #expect(tbSpMaxDev.deviceMaxGbps == nil)
+        #expect(tbSpMaxDev.verdict == .indeterminate)
+
+        let usbSpMaxDev = try #require(byName["USB_device_max_speed"])
+        #expect(usbSpMaxDev.deviceMaxGbps == nil)
+        #expect(usbSpMaxDev.verdict == .indeterminate)
+
+        // 3. UsbDeviceMaxSpeedGbps (ioreg & SP JSON)
+        let usbMaxIoreg = try #require(byName["USB_IOReg_UsbDeviceMaxSpeedGbps"])
+        #expect(usbMaxIoreg.deviceMaxGbps == nil)
+        #expect(usbMaxIoreg.verdict == .indeterminate)
+
+        let usbMaxInline = try #require(byName["USB_Inline_UsbDeviceMaxSpeedGbps"])
+        #expect(usbMaxInline.deviceMaxGbps == nil)
+        #expect(usbMaxInline.verdict == .indeterminate)
+
+        // 4. SuperSpeedPlusMaxSpeedGbps (ioreg)
+        let sspDev = try #require(byName["USB_SuperSpeedPlusMaxSpeedGbps"])
+        #expect(sspDev.deviceMaxGbps == nil)
+        #expect(sspDev.verdict == .indeterminate)
+
+        // 5. Usb3LinkPreferred (ioreg & SP JSON)
+        let prefDrive = try #require(byName["USB_Usb3LinkPreferred"])
+        #expect(prefDrive.verdict == .normal)
+
+        // 6. hasDeviceQualifier (ioreg & SP JSON)
+        let qualDrive = try #require(byName["USB_hasDeviceQualifier"])
+        #expect(qualDrive.verdict == .indeterminate)
+
+        // 7. UsbBillboardAltModeFailed (ioreg & SP JSON)
+        let billboard = try #require(byName["USB_UsbBillboardAltModeFailed"])
+        #expect(billboard.verdict == .normal)
+
+        // 8. UsbHostPortLinkSpeedLimit (ioreg port)
+        let limitPortDev = try #require(byName["USB_PortLimit_Only"])
+        #expect(limitPortDev.portCeilingGbps == nil)
+        #expect(limitPortDev.verdict == .normal)
+    }
+
+    @Test("UR3: When port ceiling (or upstream hub ceiling) is unknown, throttled segment reports '无法判断是线还是口' instead of defaulting to cable")
+    @MainActor
+    func testUR3ThrottledWithUnknownPortCeilingReportsCannotDetermineCableOrPort() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        // 1. USB SuperSpeed device (bcdUSB 0x0210) at 480 Mb/s on port with nil ceiling -> must NOT default to cable
+        let usbEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(usbEval.verdict == .throttled)
+        #expect(usbEval.bottleneckSegment != .cable)
+        #expect(usbEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+        #expect(usbEval.bottleneckSegment?.localizedLabel(zh) == "无法判断是线还是口")
+        #expect(usbEval.bottleneckSegment?.localizedLabel(en).lowercased().contains("cannot determine") == true)
+
+        let devUnknownPort = AttachedBusDevice(
+            id: "ur3-usb",
+            name: "SyntheticSSDrive",
+            vendor: "Acme",
+            busName: "USB 3.1 Bus",
+            protocolKind: .usbHost,
+            negotiatedSpeedLabel: "480 Mb/s",
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            deviceMaxGbps: usbEval.deviceMaxGbps,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8]),
+            bottleneckSegment: usbEval.bottleneckSegment,
+            verdict: usbEval.verdict,
+            diagnosticDetail: usbEval.detail
+        )
+        #expect(devUnknownPort.localizedDiagnosticDetail(zh).contains("无法判断是线还是口"))
+        #expect(!devUnknownPort.localizedDiagnosticDetail(zh).contains("线缆限速"))
+
+        // 2. Thunderbolt 40G device at 20 Gb/s when host port ceiling is nil -> must NOT default to cable
+        let tbEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .thunderboltUSB4,
+            negotiatedGbps: 20.0,
+            portCeilingGbps: nil,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0)
+        )
+        #expect(tbEval.verdict == .throttled)
+        #expect(tbEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+        #expect(tbEval.bottleneckSegment?.localizedLabel(zh) == "无法判断是线还是口")
+
+        // 3. Behind external hub whose speed is missing (nil) even when port ceiling is 10G -> must NOT blame cable by elimination
+        let hubUnknownEval = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: 10.0,
+            behindExternalHub: true,
+            upstreamHubGbps: nil,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(hubUnknownEval.verdict == .throttled)
+        #expect(hubUnknownEval.bottleneckSegment?.rawValue == "cable_or_port_indeterminate")
+
+        // 4. Positive controls when ceilings ARE proven: cable, port, and hub remain distinct
+        let provenCable = BottleneckDiagnoser.evaluate(
+            protocolKind: .thunderboltUSB4,
+            negotiatedGbps: 20.0,
+            portCeilingGbps: 40.0,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(tbSupportedLinkGbps: 40.0)
+        )
+        #expect(provenCable.bottleneckSegment == .cable)
+
+        let provenPort = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: 0.48,
+            behindExternalHub: false,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(provenPort.bottleneckSegment == .port)
+
+        let provenHub = BottleneckDiagnoser.evaluate(
+            protocolKind: .usbHost,
+            negotiatedGbps: 0.48,
+            portCeilingGbps: nil,
+            behindExternalHub: true,
+            upstreamHubGbps: 0.48,
+            capability: DeviceCapabilityDescriptor(bcdUSB: 0x0210, usbDeviceClass: 0, usbInterfaceClasses: [8])
+        )
+        #expect(provenHub.bottleneckSegment == .hub)
+    }
+
+    @Test("S4 Item 4: Billboard max speed is not fabricated as 0.48, USB 2.0 protocol-constant port ceiling is marked inferred, and Thunderbolt cable-limited attribution is marked inferred")
+    @MainActor
+    func testS4BillboardUSB2CeilingAndThunderboltCableInferredTagging() throws {
+        let en = AppLocalizer(fixedLanguage: .en)
+        let zh = AppLocalizer(fixedLanguage: .zhHans)
+
+        let syntheticSP = """
+        {
+          "SPThunderboltDataType": [
+            {
+              "_name": "thunderboltusb4_bus_0",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "1",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBCableInferredSSD",
+                  "device_name_key": "TBCableInferredSSD",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            },
+            {
+              "_name": "thunderboltusb4_bus_1",
+              "receptacle_1_tag": {
+                "current_speed_key": "20 Gb/s",
+                "receptacle_id_key": "2",
+                "receptacle_status_key": "receptacle_connected"
+              },
+              "_items": [
+                {
+                  "_name": "TBPortDirectSSD",
+                  "device_name_key": "TBPortDirectSSD",
+                  "vendor_name_key": "Acme",
+                  "mode_key": "thunderbolt_three",
+                  "route_string_key": "1",
+                  "receptacle_upstream_ambiguous_tag": {
+                    "current_speed_key": "20 Gb/s",
+                    "receptacle_status_key": "receptacle_connected"
+                  }
+                }
+              ]
+            }
+          ],
+          "SPUSBHostDataType": [
+            {
+              "_name": "USB 2.0 Bus",
+              "USBKeyLocationID": "0x04000000",
+              "_items": [
+                {
+                  "_name": "BillboardAux12M",
+                  "USBKeyLocationID": "0x04110000",
+                  "USBDeviceKeyLinkSpeed": "12 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                },
+                {
+                  "_name": "USB2PortDrive",
+                  "USBKeyLocationID": "0x04120000",
+                  "USBDeviceKeyLinkSpeed": "480 Mb/s",
+                  "USBDeviceKeyVendorName": "Acme"
+                }
+              ]
+            }
+          ]
+        }
+        """
+
+        let syntheticIOReg: [String: Any] = [
+            "AppleUSBHostPort": [
+                [
+                    "IOObjectClass": "AppleUSB20XHCIPort",
+                    "locationID": 0x04100000,
+                    "UsbIOPort": "IOService:/AppleARMPE/Port-USB-A@1",
+                    "UsbProtocol (2.0)": true,
+                    "IORegistryEntryChildren": [
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x04110000, "bcdUSB": 0x0201, "bDeviceClass": 17],
+                        ["IOObjectClass": "IOUSBHostDevice", "locationID": 0x04120000, "bcdUSB": 0x0210, "bDeviceClass": 0, "IORegistryEntryChildren": [["IOObjectClass": "IOUSBHostInterface", "bInterfaceClass": 8]]]
+                    ]
+                ]
+            ],
+            "IOThunderboltSwitch": [
+                // Router 0: 40G host port + 40G device negotiated at 20G -> cable-limited attribution is inferred!
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 0,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "1",
+                            "Supported Link Speed": 12,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOThunderboltSwitchType3", "Depth": 1, "Route String": 1, "Device Model Name": "TBCableInferredSSD"]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                // Router 1: 20G host port (Speed=8, Width=2) + 40G device negotiated at 20G -> port-limited directly from read registers (NOT inferred)
+                [
+                    "IOObjectClass": "IOThunderboltSwitchType5",
+                    "Router ID": 1,
+                    "Depth": 0,
+                    "Route String": 0,
+                    "IORegistryEntryChildren": [
+                        [
+                            "IOObjectClass": "IOThunderboltPort",
+                            "Socket ID": "2",
+                            "Supported Link Speed": 8,
+                            "Supported Link Width": 2,
+                            "Link Bandwidth": 200,
+                            "IORegistryEntryChildren": [
+                                [
+                                    "IOObjectClass": "IOThunderboltPort",
+                                    "Supported Link Speed": 12,
+                                    "Supported Link Width": 2,
+                                    "Link Bandwidth": 200,
+                                    "IORegistryEntryChildren": [
+                                        ["IOObjectClass": "IOThunderboltSwitchType3", "Depth": 1, "Route String": 1, "Device Model Name": "TBPortDirectSSD"]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let plistData = try PropertyListSerialization.data(fromPropertyList: syntheticIOReg, format: .xml, options: 0)
+        let ioregSnap = try IORegistrySnapshot.parsePlistData(plistData)
+        let snap = try BusProfilerCollector.parseSystemProfilerJSONValidated(Data(syntheticSP.utf8), ioregSnapshot: ioregSnap)
+        let byName = Dictionary(uniqueKeysWithValues: snap.devices.map { ($0.name, $0) })
+
+        // 1. Billboard auxiliary device: no fabricated 0.48 deviceMaxGbps, verdict Normal (inferred) / 正常（推断）
+        let billboard = try #require(byName["BillboardAux12M"])
+        #expect(billboard.deviceMaxGbps == nil)
+        #expect(billboard.isInferred == true)
+        #expect(billboard.localizedVerdictLabel(en) == "Normal (inferred)")
+        #expect(billboard.localizedVerdictLabel(zh) == "正常（推断）")
+        #expect(billboard.localizedDiagnosticDetail(en).lowercased().contains("inferred"))
+        #expect(billboard.localizedDiagnosticDetail(zh).contains("推断"))
+
+        // 2. Pure USB 2.0 port ceiling from protocol constant: 480 Mb/s (inferred) / 480 Mb/s（推断）
+        let usb2Drive = try #require(byName["USB2PortDrive"])
+        #expect(usb2Drive.portCeilingGbps == 0.48)
+        #expect(usb2Drive.localizedPortCeilingLabel(en) == "480 Mb/s (inferred)")
+        #expect(usb2Drive.localizedPortCeilingLabel(zh) == "480 Mb/s（推断）")
+        let usbCtrl = try #require(snap.controllers.first { $0.protocolKind == .usbHost })
+        #expect(usbCtrl.localizedMaxRateLabel(en) == "480 Mb/s (inferred)")
+        #expect(usbCtrl.localizedMaxRateLabel(zh) == "480 Mb/s（推断）")
+
+        // 3. Thunderbolt cable-limited attribution: marked inferred across verdict, segment, detail, CLI, and GUI
+        let tbCable = try #require(byName["TBCableInferredSSD"])
+        #expect(tbCable.verdict == .throttled)
+        #expect(tbCable.bottleneckSegment == .cable)
+        #expect(tbCable.isInferred == true)
+        #expect(tbCable.localizedVerdictLabel(en) == "Throttled (inferred)")
+        #expect(tbCable.localizedVerdictLabel(zh) == "被限速（推断）")
+        #expect(tbCable.localizedBottleneckSegmentLabel(en) == "Cable-limited (inferred)")
+        #expect(tbCable.localizedBottleneckSegmentLabel(zh) == "线缆限速（推断）")
+        #expect(tbCable.localizedDiagnosticDetail(en).lowercased().contains("inferred"))
+        #expect(tbCable.localizedDiagnosticDetail(zh).contains("推断"))
+        #expect(!tbCable.localizedDiagnosticDetail(zh).contains("bcdUSB"))
+
+        // Positive direct control: TBPortDirectSSD (read 20G port < read 40G device) is NOT inferred
+        let tbPort = try #require(byName["TBPortDirectSSD"])
+        #expect(tbPort.verdict == .throttled)
+        #expect(tbPort.bottleneckSegment == .port)
+        #expect(tbPort.isInferred == false)
+        #expect(tbPort.localizedVerdictLabel(zh) == "被限速")
+
+        // CLI JSON & text verification
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let jsonZh = try BusCLIRunner.renderTopologyJSON(snapshot: snap, localizer: zh, isDemo: false)
+        let payloadZh = try decoder.decode(BusCLITopologyJSONPayload.self, from: Data(jsonZh.utf8))
+        let pMapZh = Dictionary(uniqueKeysWithValues: payloadZh.devices.map { ($0.name, $0) })
+        #expect(pMapZh["BillboardAux12M"]?.deviceMaxGbps == nil)
+        #expect(pMapZh["BillboardAux12M"]?.isInferred == true)
+        #expect(pMapZh["BillboardAux12M"]?.verdictLabel == "正常（推断）")
+        #expect(pMapZh["USB2PortDrive"]?.portCeilingLabel == "480 Mb/s（推断）")
+        #expect(pMapZh["TBCableInferredSSD"]?.isInferred == true)
+        #expect(pMapZh["TBCableInferredSSD"]?.verdictLabel == "被限速（推断）")
+        #expect(pMapZh["TBCableInferredSSD"]?.bottleneckSegmentLabel == "线缆限速（推断）")
+
+        let textZh = BusCLIRunner.renderTopologyText(snapshot: snap, localizer: zh, isDemo: false)
+        #expect(textZh.contains("上限：480 Mb/s（推断）"))
+        let botZh = BusCLIRunner.renderBottlenecksText(snapshot: snap, localizer: zh, isDemo: false)
+        #expect(botZh.contains("[线缆限速（推断）]"))
     }
 }

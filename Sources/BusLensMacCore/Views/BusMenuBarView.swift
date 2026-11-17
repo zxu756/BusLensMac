@@ -20,8 +20,6 @@ public struct BusMenuBarView: View {
     }
 
     public var body: some View {
-        let indetCount = monitor.snapshot.indeterminateDevices.count
-
         VStack(alignment: .leading, spacing: 0) {
             // Anodized Header + Compact Mini Port Strip
             VStack(alignment: .leading, spacing: 9) {
@@ -61,11 +59,7 @@ public struct BusMenuBarView: View {
 
                     Spacer()
 
-                    Text(monitor.snapshot.devices.isEmpty
-                         ? localizer.L("Ports idle", "端口空闲")
-                         : (indetCount > 0
-                            ? localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
-                            : localizer.L("Full / USB 1.x rate", "满速 / USB 1.x 低速外设")))
+                    Text(Self.statusBadgeText(for: monitor.snapshot, localizer: localizer))
                         .font(.system(size: 10.5, weight: .bold, design: .monospaced))
                         .foregroundStyle(BenchTheme.ink)
                         .padding(.horizontal, 8)
@@ -122,14 +116,14 @@ public struct BusMenuBarView: View {
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundStyle(BenchTheme.ink)
                                 .lineLimit(1)
-                            Text("\(dev.localizedVendor(localizer)) · \(dev.verdict.localizedLabel(localizer))")
+                            Text("\(dev.localizedVendor(localizer)) · \(dev.localizedVerdictLabel(localizer))")
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.muted)
                                 .lineLimit(1)
                         }
                         Spacer(minLength: 6)
                         VStack(alignment: .trailing, spacing: 1) {
-                            Text(verbatim: dev.negotiatedSpeedLabel)
+                            Text(verbatim: dev.localizedNegotiatedSpeedLabel(localizer))
                                 .font(.system(size: 12, weight: .bold, design: .monospaced))
                                 .foregroundStyle(isWarn ? BenchTheme.signalOrange : BenchTheme.ink)
                                 .fixedSize(horizontal: true, vertical: false)
@@ -207,5 +201,34 @@ public struct BusMenuBarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .environment(\.locale, localizer.language.locale)
         .preferredColorScheme(.light)
+    }
+
+    @MainActor
+    public static func statusBadgeText(for snapshot: BusTopologySnapshot, localizer: AppLocalizer) -> String {
+        if snapshot.devices.isEmpty {
+            return localizer.L("Ports idle", "端口空闲")
+        }
+        let throttled = snapshot.throttledDevices
+        if !throttled.isEmpty {
+            let inferredCount = throttled.filter(\.isInferred).count
+            if inferredCount == 0 {
+                return localizer.L("\(throttled.count) throttled", "\(throttled.count) 台被限速")
+            }
+            if inferredCount == throttled.count {
+                return localizer.L("\(throttled.count) throttled (inferred)", "\(throttled.count) 台被限速（推断）")
+            }
+            return localizer.L(
+                "\(throttled.count) throttled (\(inferredCount) inferred)",
+                "\(throttled.count) 台被限速（含 \(inferredCount) 台推断）"
+            )
+        }
+        let indetCount = snapshot.indeterminateDevices.count
+        if indetCount > 0 {
+            return localizer.L("\(indetCount) speed-only", "\(indetCount) 台仅协商速率")
+        }
+        if snapshot.devices.contains(where: \.isInferred) {
+            return localizer.L("All links healthy (inferred)", "链路速率正常（含推断）")
+        }
+        return localizer.L("All links healthy", "链路速率正常")
     }
 }

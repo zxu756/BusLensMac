@@ -1,0 +1,1294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Scrubbed IORegistry Capture (Read-Only)
+  Scrub Script: Scripts/scrub-ioreg.py
+  Captured At (UTC): 2026-11-15T04:11:48Z
+  Original Command: /usr/sbin/ioreg -a -r -c AppleUSBHostPort -l ; /usr/sbin/ioreg -a -r -c IOThunderboltSwitch -l
+  Removed Keys: <uuid-dict-key>, Address, DROM, Elements, HPM Address, IOUserClientCreator, IOUserServerCDHash, IOUserServerName, Micro Address, PCI Path, Path, ReportDescriptor, SerialNumber, TRM Hash Set, TRM Transport ID, UID, USB Address, USB Serial Number, UUID, UsbDeviceSignature, UsbExclusiveOwner, UserPreferences, iSerialNumber, kOSBundleDextUniqueIdentifier, kUSBAddress, kUSBContainerID, kUSBSerialNumberString, sessionID
+  Synthetic Entries Added: 0
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>AppleUSBHostPort</key>
+	<array>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>20100000</string>
+			<key>IORegistryEntryName</key>
+			<string>AppleUSB20XHCIPort</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB30XHCIPort@20300000</string>
+			<key>locationID</key>
+			<integer>537919488</integer>
+			<key>port</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>20200000</string>
+			<key>IORegistryEntryName</key>
+			<string>AppleUSB20XHCIPort</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB30XHCIPort@20400000</string>
+			<key>locationID</key>
+			<integer>538968064</integer>
+			<key>port</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>20300000</string>
+			<key>IORegistryEntryName</key>
+			<string>AppleUSB30XHCIPort</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB20XHCIPort@20100000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB20XHCIPort@20100000</string>
+			<key>locationID</key>
+			<integer>540016640</integer>
+			<key>port</key>
+			<integer>3</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>20400000</string>
+			<key>IORegistryEntryName</key>
+			<string>AppleUSB30XHCIPort</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB20XHCIPort@20200000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/apciec1@60000000/AppleT8132PCIeC/pcic1-bridge@0/IOPP/pci-bridge@0/IOPP/pci-bridge@2/IOPP/pci8086,15f0@0/AppleUSBXHCITR@20000000/AppleUSB20XHCIPort@20200000</string>
+			<key>locationID</key>
+			<integer>541065216</integer>
+			<key>port</key>
+			<integer>4</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>00100000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd0-port-hs</string>
+			<key>PortNumber</key>
+			<integer>1</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm0@C/AppleHPMARMSPMI/AppleHPMDeviceHALType3@C/Port-USB-C@1</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd0@2280000/AppleT8132USBXHCI@00000000/usb-drd0-port-ss@00200000</string>
+			<key>locationID</key>
+			<integer>1048576</integer>
+			<key>port</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>00200000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd0-port-ss</string>
+			<key>PortNumber</key>
+			<integer>1</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm0@C/AppleHPMARMSPMI/AppleHPMDeviceHALType3@C/Port-USB-C@1</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd0@2280000/AppleT8132USBXHCI@00000000/usb-drd0-port-hs@00100000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd0@2280000/AppleT8132USBXHCI@00000000/usb-drd0-port-hs@00100000</string>
+			<key>locationID</key>
+			<integer>2097152</integer>
+			<key>port</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>01100000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd1-port-hs</string>
+			<key>PortNumber</key>
+			<integer>2</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm1@A/AppleHPMARMSPMI/AppleHPMDeviceHALType3@A/Port-USB-C@2</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd1@A280000/AppleT8132USBXHCI@01000000/usb-drd1-port-ss@01200000</string>
+			<key>locationID</key>
+			<integer>17825792</integer>
+			<key>port</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>01200000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd1-port-ss</string>
+			<key>PortNumber</key>
+			<integer>2</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm1@A/AppleHPMARMSPMI/AppleHPMDeviceHALType3@A/Port-USB-C@2</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd1@A280000/AppleT8132USBXHCI@01000000/usb-drd1-port-hs@01100000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd1@A280000/AppleT8132USBXHCI@01000000/usb-drd1-port-hs@01100000</string>
+			<key>locationID</key>
+			<integer>18874368</integer>
+			<key>port</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIPort</string>
+			<key>IORegistryEntryChildren</key>
+			<array>
+				<dict>
+					<key>Device Speed</key>
+					<integer>2</integer>
+					<key>IOObjectClass</key>
+					<string>IOUSBHostDevice</string>
+					<key>IORegistryEntryChildren</key>
+					<array>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSB20Hub</string>
+							<key>IORegistryEntryChildren</key>
+							<array>
+								<dict>
+									<key>IOObjectClass</key>
+									<string>AppleUSB20HubPort</string>
+									<key>IORegistryEntryLocation</key>
+									<string>02110000</string>
+									<key>IORegistryEntryName</key>
+									<string>usb2-hub-port1</string>
+									<key>PortNumber</key>
+									<integer>5</integer>
+									<key>UsbIOPort</key>
+									<string>IOService:/AppleARMPE/port-usb-c-5/Port-USB-C@5</string>
+									<key>UsbProtocol (1.x)</key>
+									<true/>
+									<key>UsbProtocol (2.0)</key>
+									<true/>
+									<key>UsbProtocolCompanion (3.x)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-ss@02200000/USB3 Gen2 Hub@02200000/AppleUSB30Hub@02200000/usb3-hub-port1@02210000</string>
+									<key>locationID</key>
+									<integer>34668544</integer>
+									<key>port</key>
+									<integer>1</integer>
+								</dict>
+								<dict>
+									<key>IOObjectClass</key>
+									<string>AppleUSB20HubPort</string>
+									<key>IORegistryEntryChildren</key>
+									<array>
+										<dict>
+											<key>Device Speed</key>
+											<integer>1</integer>
+											<key>IOObjectClass</key>
+											<string>IOUSBHostDevice</string>
+											<key>IORegistryEntryChildren</key>
+											<array>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>AppleUSBHostCompositeDevice</string>
+													<key>IORegistryEntryName</key>
+													<string>AppleUSBHostCompositeDevice</string>
+													<key>bDeviceClass</key>
+													<integer>0</integer>
+													<key>bDeviceSubClass</key>
+													<integer>0</integer>
+												</dict>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>IOUSBHostInterface</string>
+													<key>IORegistryEntryLocation</key>
+													<string>0</string>
+													<key>IORegistryEntryName</key>
+													<string>IOUSBHostInterface</string>
+													<key>USB Product Name</key>
+													<string>AJAZZ AJ159 APEX</string>
+													<key>USBPortType</key>
+													<integer>5</integer>
+													<key>USBSpeed</key>
+													<integer>1</integer>
+													<key>bInterfaceClass</key>
+													<integer>3</integer>
+													<key>bInterfaceNumber</key>
+													<integer>0</integer>
+													<key>bInterfaceProtocol</key>
+													<integer>2</integer>
+													<key>bInterfaceSubClass</key>
+													<integer>1</integer>
+													<key>bcdDevice</key>
+													<integer>518</integer>
+													<key>idProduct</key>
+													<integer>16422</integer>
+													<key>idVendor</key>
+													<integer>12625</integer>
+													<key>locationID</key>
+													<integer>34734080</integer>
+												</dict>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>IOUSBHostInterface</string>
+													<key>IORegistryEntryLocation</key>
+													<string>1</string>
+													<key>IORegistryEntryName</key>
+													<string>IOUSBHostInterface</string>
+													<key>USB Product Name</key>
+													<string>AJAZZ AJ159 APEX</string>
+													<key>USBPortType</key>
+													<integer>5</integer>
+													<key>USBSpeed</key>
+													<integer>1</integer>
+													<key>bInterfaceClass</key>
+													<integer>3</integer>
+													<key>bInterfaceNumber</key>
+													<integer>1</integer>
+													<key>bInterfaceProtocol</key>
+													<integer>1</integer>
+													<key>bInterfaceSubClass</key>
+													<integer>1</integer>
+													<key>bcdDevice</key>
+													<integer>518</integer>
+													<key>idProduct</key>
+													<integer>16422</integer>
+													<key>idVendor</key>
+													<integer>12625</integer>
+													<key>locationID</key>
+													<integer>34734080</integer>
+												</dict>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>IOUSBHostInterface</string>
+													<key>IORegistryEntryLocation</key>
+													<string>2</string>
+													<key>IORegistryEntryName</key>
+													<string>IOUSBHostInterface</string>
+													<key>USB Product Name</key>
+													<string>AJAZZ AJ159 APEX</string>
+													<key>USBPortType</key>
+													<integer>5</integer>
+													<key>USBSpeed</key>
+													<integer>1</integer>
+													<key>bInterfaceClass</key>
+													<integer>3</integer>
+													<key>bInterfaceNumber</key>
+													<integer>2</integer>
+													<key>bInterfaceProtocol</key>
+													<integer>0</integer>
+													<key>bInterfaceSubClass</key>
+													<integer>0</integer>
+													<key>bcdDevice</key>
+													<integer>518</integer>
+													<key>idProduct</key>
+													<integer>16422</integer>
+													<key>idVendor</key>
+													<integer>12625</integer>
+													<key>locationID</key>
+													<integer>34734080</integer>
+												</dict>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>AppleUSBHostDeviceUserClient</string>
+													<key>IORegistryEntryName</key>
+													<string>Google Chrome</string>
+												</dict>
+												<dict>
+													<key>IOObjectClass</key>
+													<string>AppleUSBHostDeviceUserClient</string>
+													<key>IORegistryEntryName</key>
+													<string>ChatGPT</string>
+												</dict>
+											</array>
+											<key>IORegistryEntryLocation</key>
+											<string>02120000</string>
+											<key>IORegistryEntryName</key>
+											<string>AJAZZ AJ159 APEX</string>
+											<key>USB Product Name</key>
+											<string>AJAZZ AJ159 APEX</string>
+											<key>USBPortType</key>
+											<integer>5</integer>
+											<key>USBSpeed</key>
+											<integer>1</integer>
+											<key>UsbLinkSpeed</key>
+											<integer>12000000</integer>
+											<key>bDeviceClass</key>
+											<integer>0</integer>
+											<key>bDeviceProtocol</key>
+											<integer>0</integer>
+											<key>bDeviceSubClass</key>
+											<integer>0</integer>
+											<key>bcdDevice</key>
+											<integer>518</integer>
+											<key>bcdUSB</key>
+											<integer>512</integer>
+											<key>idProduct</key>
+											<integer>16422</integer>
+											<key>idVendor</key>
+											<integer>12625</integer>
+											<key>kUSBProductString</key>
+											<string>AJAZZ AJ159 APEX</string>
+											<key>locationID</key>
+											<integer>34734080</integer>
+										</dict>
+									</array>
+									<key>IORegistryEntryLocation</key>
+									<string>02120000</string>
+									<key>IORegistryEntryName</key>
+									<string>usb2-hub-port2</string>
+									<key>PortNumber</key>
+									<integer>6</integer>
+									<key>UsbIOPort</key>
+									<string>IOService:/AppleARMPE/port-usb-c-6/Port-USB-C@6</string>
+									<key>UsbProtocol (1.x)</key>
+									<true/>
+									<key>UsbProtocol (2.0)</key>
+									<true/>
+									<key>UsbProtocolCompanion (3.x)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-ss@02200000/USB3 Gen2 Hub@02200000/AppleUSB30Hub@02200000/usb3-hub-port2@02220000</string>
+									<key>locationID</key>
+									<integer>34734080</integer>
+									<key>port</key>
+									<integer>2</integer>
+								</dict>
+							</array>
+							<key>IORegistryEntryLocation</key>
+							<string>02100000</string>
+							<key>IORegistryEntryName</key>
+							<string>AppleUSB20Hub</string>
+							<key>bDeviceClass</key>
+							<integer>9</integer>
+							<key>bDeviceSubClass</key>
+							<integer>0</integer>
+							<key>locationID</key>
+							<integer>34603008</integer>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>IOUSBHostInterface</string>
+							<key>IORegistryEntryLocation</key>
+							<string>0</string>
+							<key>IORegistryEntryName</key>
+							<string>IOUSBHostInterface</string>
+							<key>USB Product Name</key>
+							<string>USB2 Hub</string>
+							<key>USB Vendor Name</key>
+							<string>Apple</string>
+							<key>USBPortType</key>
+							<integer>2</integer>
+							<key>USBSpeed</key>
+							<integer>3</integer>
+							<key>bInterfaceClass</key>
+							<integer>9</integer>
+							<key>bInterfaceNumber</key>
+							<integer>0</integer>
+							<key>bInterfaceProtocol</key>
+							<integer>2</integer>
+							<key>bInterfaceSubClass</key>
+							<integer>0</integer>
+							<key>bcdDevice</key>
+							<integer>22037</integer>
+							<key>idProduct</key>
+							<integer>32779</integer>
+							<key>idVendor</key>
+							<integer>1452</integer>
+							<key>locationID</key>
+							<integer>34603008</integer>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSBHostDeviceUserClient</string>
+							<key>IORegistryEntryName</key>
+							<string>Google Chrome</string>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSBHostDeviceUserClient</string>
+							<key>IORegistryEntryName</key>
+							<string>ChatGPT</string>
+						</dict>
+					</array>
+					<key>IORegistryEntryLocation</key>
+					<string>02100000</string>
+					<key>IORegistryEntryName</key>
+					<string>USB2 Hub</string>
+					<key>USB Product Name</key>
+					<string>USB2 Hub</string>
+					<key>USB Vendor Name</key>
+					<string>Apple</string>
+					<key>USBPortType</key>
+					<integer>2</integer>
+					<key>USBSpeed</key>
+					<integer>3</integer>
+					<key>UsbLinkSpeed</key>
+					<integer>480000000</integer>
+					<key>bDeviceClass</key>
+					<integer>9</integer>
+					<key>bDeviceProtocol</key>
+					<integer>2</integer>
+					<key>bDeviceSubClass</key>
+					<integer>0</integer>
+					<key>bcdDevice</key>
+					<integer>22037</integer>
+					<key>bcdUSB</key>
+					<integer>528</integer>
+					<key>idProduct</key>
+					<integer>32779</integer>
+					<key>idVendor</key>
+					<integer>1452</integer>
+					<key>kUSBProductString</key>
+					<string>USB2 Hub</string>
+					<key>kUSBVendorString</key>
+					<string>Apple</string>
+					<key>locationID</key>
+					<integer>34603008</integer>
+				</dict>
+			</array>
+			<key>IORegistryEntryLocation</key>
+			<string>02100000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd2-port-hs</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-ss@02200000</string>
+			<key>locationID</key>
+			<integer>34603008</integer>
+			<key>port</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIARMPort</string>
+			<key>IORegistryEntryChildren</key>
+			<array>
+				<dict>
+					<key>Device Speed</key>
+					<integer>4</integer>
+					<key>IOObjectClass</key>
+					<string>IOUSBHostDevice</string>
+					<key>IORegistryEntryChildren</key>
+					<array>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSB30Hub</string>
+							<key>IORegistryEntryChildren</key>
+							<array>
+								<dict>
+									<key>IOObjectClass</key>
+									<string>AppleUSB30HubPort</string>
+									<key>IORegistryEntryLocation</key>
+									<string>02210000</string>
+									<key>IORegistryEntryName</key>
+									<string>usb3-hub-port1</string>
+									<key>PortNumber</key>
+									<integer>5</integer>
+									<key>UsbIOPort</key>
+									<string>IOService:/AppleARMPE/port-usb-c-5/Port-USB-C@5</string>
+									<key>UsbProtocol (3.x)</key>
+									<true/>
+									<key>UsbProtocolCompanion (1.x)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000/USB2 Hub@02100000/AppleUSB20Hub@02100000/usb2-hub-port1@02110000</string>
+									<key>UsbProtocolCompanion (2.0)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000/USB2 Hub@02100000/AppleUSB20Hub@02100000/usb2-hub-port1@02110000</string>
+									<key>locationID</key>
+									<integer>35717120</integer>
+									<key>port</key>
+									<integer>1</integer>
+								</dict>
+								<dict>
+									<key>IOObjectClass</key>
+									<string>AppleUSB30HubPort</string>
+									<key>IORegistryEntryLocation</key>
+									<string>02220000</string>
+									<key>IORegistryEntryName</key>
+									<string>usb3-hub-port2</string>
+									<key>PortNumber</key>
+									<integer>6</integer>
+									<key>UsbIOPort</key>
+									<string>IOService:/AppleARMPE/port-usb-c-6/Port-USB-C@6</string>
+									<key>UsbProtocol (3.x)</key>
+									<true/>
+									<key>UsbProtocolCompanion (1.x)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000/USB2 Hub@02100000/AppleUSB20Hub@02100000/usb2-hub-port2@02120000</string>
+									<key>UsbProtocolCompanion (2.0)</key>
+									<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000/USB2 Hub@02100000/AppleUSB20Hub@02100000/usb2-hub-port2@02120000</string>
+									<key>locationID</key>
+									<integer>35782656</integer>
+									<key>port</key>
+									<integer>2</integer>
+								</dict>
+							</array>
+							<key>IORegistryEntryLocation</key>
+							<string>02200000</string>
+							<key>IORegistryEntryName</key>
+							<string>AppleUSB30Hub</string>
+							<key>USBSpeed</key>
+							<integer>5</integer>
+							<key>bDeviceClass</key>
+							<integer>9</integer>
+							<key>bDeviceSubClass</key>
+							<integer>0</integer>
+							<key>locationID</key>
+							<integer>35651584</integer>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>IOUSBHostInterface</string>
+							<key>IORegistryEntryLocation</key>
+							<string>0</string>
+							<key>IORegistryEntryName</key>
+							<string>IOUSBHostInterface</string>
+							<key>USB Product Name</key>
+							<string>USB3 Gen2 Hub</string>
+							<key>USB Vendor Name</key>
+							<string>Apple</string>
+							<key>USBPortType</key>
+							<integer>2</integer>
+							<key>USBSpeed</key>
+							<integer>5</integer>
+							<key>bInterfaceClass</key>
+							<integer>9</integer>
+							<key>bInterfaceNumber</key>
+							<integer>0</integer>
+							<key>bInterfaceProtocol</key>
+							<integer>0</integer>
+							<key>bInterfaceSubClass</key>
+							<integer>0</integer>
+							<key>bcdDevice</key>
+							<integer>22037</integer>
+							<key>idProduct</key>
+							<integer>32780</integer>
+							<key>idVendor</key>
+							<integer>1452</integer>
+							<key>locationID</key>
+							<integer>35651584</integer>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSBHostDeviceUserClient</string>
+							<key>IORegistryEntryName</key>
+							<string>Google Chrome</string>
+						</dict>
+						<dict>
+							<key>IOObjectClass</key>
+							<string>AppleUSBHostDeviceUserClient</string>
+							<key>IORegistryEntryName</key>
+							<string>ChatGPT</string>
+						</dict>
+					</array>
+					<key>IORegistryEntryLocation</key>
+					<string>02200000</string>
+					<key>IORegistryEntryName</key>
+					<string>USB3 Gen2 Hub</string>
+					<key>USB Product Name</key>
+					<string>USB3 Gen2 Hub</string>
+					<key>USB Vendor Name</key>
+					<string>Apple</string>
+					<key>USBPortType</key>
+					<integer>2</integer>
+					<key>USBSpeed</key>
+					<integer>5</integer>
+					<key>UsbLinkSpeed</key>
+					<integer>10000000000</integer>
+					<key>bDeviceClass</key>
+					<integer>9</integer>
+					<key>bDeviceProtocol</key>
+					<integer>3</integer>
+					<key>bDeviceSubClass</key>
+					<integer>0</integer>
+					<key>bcdDevice</key>
+					<integer>22037</integer>
+					<key>bcdUSB</key>
+					<integer>800</integer>
+					<key>idProduct</key>
+					<integer>32780</integer>
+					<key>idVendor</key>
+					<integer>1452</integer>
+					<key>kUSBProductString</key>
+					<string>USB3 Gen2 Hub</string>
+					<key>kUSBVendorString</key>
+					<string>Apple</string>
+					<key>locationID</key>
+					<integer>35651584</integer>
+				</dict>
+			</array>
+			<key>IORegistryEntryLocation</key>
+			<string>02200000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd2-port-ss</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd2@12280000/AppleT8132USBXHCI@02000000/usb-drd2-port-hs@02100000</string>
+			<key>locationID</key>
+			<integer>35651584</integer>
+			<key>port</key>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB20XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>03100000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd3-port-hs</string>
+			<key>PortNumber</key>
+			<integer>4</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm3@8/AppleHPMARMSPMI/AppleHPMDeviceHALType3@8/Port-USB-C@4</string>
+			<key>UsbProtocol (1.x)</key>
+			<true/>
+			<key>UsbProtocol (2.0)</key>
+			<true/>
+			<key>UsbProtocolCompanion (3.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd3@1A280000/AppleT8132USBXHCI@03000000/usb-drd3-port-ss@03200000</string>
+			<key>locationID</key>
+			<integer>51380224</integer>
+			<key>port</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>IOObjectClass</key>
+			<string>AppleUSB30XHCIARMPort</string>
+			<key>IORegistryEntryLocation</key>
+			<string>03200000</string>
+			<key>IORegistryEntryName</key>
+			<string>usb-drd3-port-ss</string>
+			<key>PortNumber</key>
+			<integer>4</integer>
+			<key>UsbIOPort</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/nub-spmi-a0@88908000/AppleSPMIController/hpm3@8/AppleHPMARMSPMI/AppleHPMDeviceHALType3@8/Port-USB-C@4</string>
+			<key>UsbProtocol (3.x)</key>
+			<true/>
+			<key>UsbProtocolCompanion (1.x)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd3@1A280000/AppleT8132USBXHCI@03000000/usb-drd3-port-hs@03100000</string>
+			<key>UsbProtocolCompanion (2.0)</key>
+			<string>IOService:/AppleARMPE/arm-io@10F00000/AppleH16GFamilyIO/usb-drd3@1A280000/AppleT8132USBXHCI@03000000/usb-drd3-port-hs@03100000</string>
+			<key>locationID</key>
+			<integer>52428800</integer>
+			<key>port</key>
+			<integer>2</integer>
+		</dict>
+	</array>
+	<key>IOThunderboltSwitch</key>
+	<array>
+		<dict>
+			<key>Depth</key>
+			<integer>0</integer>
+			<key>Device ID</key>
+			<integer>8200</integer>
+			<key>Device Model Name</key>
+			<string>iOS</string>
+			<key>Device Vendor Name</key>
+			<string>Apple Inc.</string>
+			<key>IOObjectClass</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>IORegistryEntryChildren</key>
+			<array>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>8</integer>
+					<key>Current Link Width</key>
+					<integer>1</integer>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>1</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>100</integer>
+					<key>Socket ID</key>
+					<string>1</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>1</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>8</integer>
+					<key>Current Link Width</key>
+					<integer>1</integer>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>2</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>100</integer>
+					<key>Socket ID</key>
+					<string>1</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>1</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>3</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>4</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>5</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>6</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>8</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+			</array>
+			<key>IORegistryEntryName</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>Route String</key>
+			<integer>0</integer>
+			<key>Router ID</key>
+			<integer>0</integer>
+			<key>Thunderbolt Version</key>
+			<integer>32</integer>
+			<key>Vendor ID</key>
+			<integer>1452</integer>
+		</dict>
+		<dict>
+			<key>Depth</key>
+			<integer>0</integer>
+			<key>Device ID</key>
+			<integer>8206</integer>
+			<key>Device Model Name</key>
+			<string>iOS</string>
+			<key>Device Vendor Name</key>
+			<string>Apple Inc.</string>
+			<key>IOObjectClass</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>IORegistryEntryChildren</key>
+			<array>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>4</integer>
+					<key>Current Link Width</key>
+					<integer>2</integer>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryChildren</key>
+					<array>
+						<dict>
+							<key>Current Link Speed</key>
+							<integer>4</integer>
+							<key>Current Link Width</key>
+							<integer>2</integer>
+							<key>Device ID</key>
+							<integer>5615</integer>
+							<key>IOObjectClass</key>
+							<string>IOThunderboltPort</string>
+							<key>IORegistryEntryChildren</key>
+							<array>
+								<dict>
+									<key>Depth</key>
+									<integer>1</integer>
+									<key>Device ID</key>
+									<integer>5615</integer>
+									<key>Device Model Name</key>
+									<string>TBU405Pro</string>
+									<key>Device Vendor Name</key>
+									<string>ACASIS</string>
+									<key>IOObjectClass</key>
+									<string>IOThunderboltSwitchType3</string>
+									<key>IORegistryEntryChildren</key>
+									<array>
+										<dict>
+											<key>Current Link Speed</key>
+											<integer>4</integer>
+											<key>Current Link Width</key>
+											<integer>2</integer>
+											<key>Device ID</key>
+											<integer>5615</integer>
+											<key>IOObjectClass</key>
+											<string>IOThunderboltPort</string>
+											<key>IORegistryEntryLocation</key>
+											<string>2</string>
+											<key>IORegistryEntryName</key>
+											<string>IOThunderboltPort</string>
+											<key>Link Bandwidth</key>
+											<integer>0</integer>
+											<key>Supported Link Speed</key>
+											<integer>12</integer>
+											<key>Supported Link Width</key>
+											<integer>2</integer>
+											<key>Target Link Width</key>
+											<integer>3</integer>
+											<key>Thunderbolt Version</key>
+											<integer>16</integer>
+											<key>Vendor ID</key>
+											<integer>32902</integer>
+										</dict>
+										<dict>
+											<key>Device ID</key>
+											<integer>5615</integer>
+											<key>IOObjectClass</key>
+											<string>IOThunderboltPort</string>
+											<key>IORegistryEntryLocation</key>
+											<string>8</string>
+											<key>IORegistryEntryName</key>
+											<string>IOThunderboltPort</string>
+											<key>Thunderbolt Version</key>
+											<integer>16</integer>
+											<key>Vendor ID</key>
+											<integer>32902</integer>
+										</dict>
+										<dict>
+											<key>Device ID</key>
+											<integer>5615</integer>
+											<key>IOObjectClass</key>
+											<string>IOThunderboltPort</string>
+											<key>IORegistryEntryLocation</key>
+											<string>9</string>
+											<key>IORegistryEntryName</key>
+											<string>IOThunderboltPort</string>
+											<key>Thunderbolt Version</key>
+											<integer>16</integer>
+											<key>Vendor ID</key>
+											<integer>32902</integer>
+										</dict>
+										<dict>
+											<key>Device ID</key>
+											<integer>5615</integer>
+											<key>IOObjectClass</key>
+											<string>IOThunderboltPort</string>
+											<key>IORegistryEntryLocation</key>
+											<string>C</string>
+											<key>IORegistryEntryName</key>
+											<string>IOThunderboltPort</string>
+											<key>Thunderbolt Version</key>
+											<integer>16</integer>
+											<key>Vendor ID</key>
+											<integer>32902</integer>
+										</dict>
+										<dict>
+											<key>Device ID</key>
+											<integer>5615</integer>
+											<key>IOObjectClass</key>
+											<string>IOThunderboltPort</string>
+											<key>IORegistryEntryLocation</key>
+											<string>D</string>
+											<key>IORegistryEntryName</key>
+											<string>IOThunderboltPort</string>
+											<key>Thunderbolt Version</key>
+											<integer>16</integer>
+											<key>Vendor ID</key>
+											<integer>32902</integer>
+										</dict>
+									</array>
+									<key>IORegistryEntryName</key>
+									<string>IOThunderboltSwitchType3</string>
+									<key>Route String</key>
+									<integer>1</integer>
+									<key>Thunderbolt Version</key>
+									<integer>16</integer>
+									<key>Vendor ID</key>
+									<integer>32902</integer>
+								</dict>
+							</array>
+							<key>IORegistryEntryLocation</key>
+							<string>1</string>
+							<key>IORegistryEntryName</key>
+							<string>IOThunderboltPort</string>
+							<key>Link Bandwidth</key>
+							<integer>400</integer>
+							<key>Supported Link Speed</key>
+							<integer>12</integer>
+							<key>Supported Link Width</key>
+							<integer>2</integer>
+							<key>Target Link Width</key>
+							<integer>3</integer>
+							<key>Thunderbolt Version</key>
+							<integer>16</integer>
+							<key>Vendor ID</key>
+							<integer>32902</integer>
+						</dict>
+					</array>
+					<key>IORegistryEntryLocation</key>
+					<string>1</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>400</integer>
+					<key>Socket ID</key>
+					<string>2</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>3</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>4</integer>
+					<key>Current Link Width</key>
+					<integer>2</integer>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>2</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>0</integer>
+					<key>Socket ID</key>
+					<string>2</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>3</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>3</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>4</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>5</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8206</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>6</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>8</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+			</array>
+			<key>IORegistryEntryName</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>Route String</key>
+			<integer>0</integer>
+			<key>Router ID</key>
+			<integer>1</integer>
+			<key>Thunderbolt Version</key>
+			<integer>32</integer>
+			<key>Vendor ID</key>
+			<integer>1452</integer>
+		</dict>
+		<dict>
+			<key>Depth</key>
+			<integer>0</integer>
+			<key>Device ID</key>
+			<integer>8200</integer>
+			<key>Device Model Name</key>
+			<string>iOS</string>
+			<key>Device Vendor Name</key>
+			<string>Apple Inc.</string>
+			<key>IOObjectClass</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>IORegistryEntryChildren</key>
+			<array>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>8</integer>
+					<key>Current Link Width</key>
+					<integer>1</integer>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>1</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>100</integer>
+					<key>Socket ID</key>
+					<string>4</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>1</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Current Link Speed</key>
+					<integer>8</integer>
+					<key>Current Link Width</key>
+					<integer>1</integer>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>2</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Link Bandwidth</key>
+					<integer>100</integer>
+					<key>Socket ID</key>
+					<string>4</string>
+					<key>Supported Link Speed</key>
+					<integer>12</integer>
+					<key>Supported Link Width</key>
+					<integer>2</integer>
+					<key>Target Link Width</key>
+					<integer>1</integer>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>3</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>4</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>5</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+				<dict>
+					<key>Device ID</key>
+					<integer>8200</integer>
+					<key>IOObjectClass</key>
+					<string>IOThunderboltPort</string>
+					<key>IORegistryEntryLocation</key>
+					<string>6</string>
+					<key>IORegistryEntryName</key>
+					<string>IOThunderboltPort</string>
+					<key>Thunderbolt Version</key>
+					<integer>32</integer>
+					<key>Vendor ID</key>
+					<integer>1452</integer>
+				</dict>
+			</array>
+			<key>IORegistryEntryName</key>
+			<string>IOThunderboltSwitchType5</string>
+			<key>Route String</key>
+			<integer>0</integer>
+			<key>Router ID</key>
+			<integer>3</integer>
+			<key>Thunderbolt Version</key>
+			<integer>32</integer>
+			<key>Vendor ID</key>
+			<integer>1452</integer>
+		</dict>
+	</array>
+</dict>
+</plist>

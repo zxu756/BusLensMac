@@ -21,27 +21,94 @@ public enum BusProtocolKind: String, Codable, Equatable, Sendable {
     }
 }
 
+public enum BottleneckSegment: String, Codable, Equatable, Sendable {
+    case cable = "cable"
+    case hub = "hub"
+    case port = "port"
+    case cableOrPortIndeterminate = "cable_or_port_indeterminate"
+
+    @MainActor
+    public func localizedLabel(_ localizer: AppLocalizer) -> String {
+        switch self {
+        case .cable: return localizer.L("Cable-limited", "线缆限速")
+        case .hub: return localizer.L("Hub-limited", "集线器限速")
+        case .port: return localizer.L("Port-limited", "端口限速")
+        case .cableOrPortIndeterminate: return localizer.L("Cannot determine if cable or port", "无法判断是线还是口")
+        }
+    }
+}
+
+public struct DeviceCapabilityDescriptor: Codable, Equatable, Sendable {
+    public var bcdUSB: Int?
+    public var usbDeviceClass: Int?
+    public var usbInterfaceClasses: [Int]
+    public var tbSupportedLinkGbps: Double?
+
+    public init(
+        bcdUSB: Int? = nil,
+        usbDeviceClass: Int? = nil,
+        usbInterfaceClasses: [Int] = [],
+        tbSupportedLinkGbps: Double? = nil
+    ) {
+        self.bcdUSB = bcdUSB
+        self.usbDeviceClass = usbDeviceClass
+        self.usbInterfaceClasses = usbInterfaceClasses
+        self.tbSupportedLinkGbps = tbSupportedLinkGbps
+    }
+
+    /// True only when USB device/interface descriptors explicitly verify HID (class 3)
+    /// and no high-bandwidth storage/video/CDC-data interface (classes 8, 10, 14) is present.
+    public var isVerifiedHIDPeripheral: Bool {
+        if usbDeviceClass == 8 || usbDeviceClass == 10 || usbDeviceClass == 14 {
+            return false
+        }
+        if usbInterfaceClasses.contains(where: { $0 == 8 || $0 == 10 || $0 == 14 }) {
+            return false
+        }
+        if usbDeviceClass == 3 {
+            return true
+        }
+        return !usbInterfaceClasses.isEmpty && usbInterfaceClasses.contains(3)
+    }
+
+    /// True when the device is a USB Billboard endpoint (class 17 / 0x11), such as a dock's auxiliary controller.
+    public var isAuxiliaryBillboardEndpoint: Bool {
+        if usbDeviceClass == 17 {
+            return true
+        }
+        return (usbDeviceClass == nil || usbDeviceClass == 0)
+            && !usbInterfaceClasses.isEmpty
+            && usbInterfaceClasses.allSatisfy { $0 == 17 }
+    }
+}
+
 public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
     case fullRate = "Full bus rate"
-    case lowSpeedPeripheral = "Low-speed peripheral"
+    case normal = "Normal"
+    case lowSpeedPeripheral = "HID peripheral"
+    case throttled = "Throttled"
     case indeterminate = "Indeterminate"
 
     public var jsonCode: String {
         switch self {
         case .fullRate: return "full_rate"
+        case .normal: return "normal"
         case .lowSpeedPeripheral: return "low_speed_peripheral"
+        case .throttled: return "throttled"
         case .indeterminate: return "indeterminate"
         }
     }
 
     public var isWarning: Bool {
-        false
+        self == .throttled
     }
 
     public var color: Color {
         switch self {
         case .fullRate: return Color(red: 0.082, green: 0.341, blue: 0.690)             // Thunderbolt Cobalt #1557B0
+        case .normal: return Color(red: 0.075, green: 0.451, blue: 0.337)               // SuperSpeed Pine #137356
         case .lowSpeedPeripheral: return Color(red: 0.075, green: 0.451, blue: 0.337)   // SuperSpeed Pine #137356
+        case .throttled: return Color(red: 0.863, green: 0.271, blue: 0.094)            // Signal Orange #DC4518
         case .indeterminate: return Color(red: 0.341, green: 0.349, blue: 0.369)        // Silkscreen Graphite #57595E
         }
     }
@@ -50,7 +117,9 @@ public enum LinkHealthVerdict: String, Codable, Equatable, Sendable {
     public func localizedLabel(_ localizer: AppLocalizer) -> String {
         switch self {
         case .fullRate: return localizer.L("Full bus rate", "满速")
-        case .lowSpeedPeripheral: return localizer.L("Low-speed peripheral", "低速外设（USB 1.x）")
+        case .normal: return localizer.L("Normal", "正常")
+        case .lowSpeedPeripheral: return localizer.L("HID peripheral", "HID / 低速外设")
+        case .throttled: return localizer.L("Throttled", "被限速")
         case .indeterminate: return localizer.L("Indeterminate", "无法判断是否被限速")
         }
     }
@@ -61,13 +130,22 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     public var name: String
     public var vendor: String
     public var busName: String
+    public var physicalPort: String?
+    public var locationID: String?
     public var protocolKind: BusProtocolKind
     public var negotiatedSpeedLabel: String
     public var negotiatedGbps: Double
     public var portCeilingGbps: Double?
+    public var isPortCeilingInferred: Bool
+    public var deviceMaxGbps: Double?
+    public var upstreamHubGbps: Double?
     public var depth: Int
     public var behindExternalHub: Bool
     public var modeDescription: String
+    public var capability: DeviceCapabilityDescriptor?
+    public var bottleneckSegment: BottleneckSegment?
+    public var isInferred: Bool
+    public var isPhysicalPortInferred: Bool
     public var verdict: LinkHealthVerdict
     public var diagnosticDetail: String
 
@@ -76,13 +154,22 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         name: String,
         vendor: String,
         busName: String,
+        physicalPort: String? = nil,
+        locationID: String? = nil,
         protocolKind: BusProtocolKind,
         negotiatedSpeedLabel: String,
         negotiatedGbps: Double,
         portCeilingGbps: Double?,
+        isPortCeilingInferred: Bool = false,
+        deviceMaxGbps: Double? = nil,
+        upstreamHubGbps: Double? = nil,
         depth: Int = 0,
         behindExternalHub: Bool? = nil,
         modeDescription: String = "",
+        capability: DeviceCapabilityDescriptor? = nil,
+        bottleneckSegment: BottleneckSegment? = nil,
+        isInferred: Bool? = nil,
+        isPhysicalPortInferred: Bool = false,
         verdict: LinkHealthVerdict,
         diagnosticDetail: String
     ) {
@@ -90,17 +177,43 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
         self.name = name
         self.vendor = vendor
         self.busName = busName
+        self.physicalPort = physicalPort
+        self.locationID = locationID
         self.protocolKind = protocolKind
         self.negotiatedSpeedLabel = negotiatedSpeedLabel
         self.negotiatedGbps = max(0, negotiatedGbps)
         if let portCeilingGbps, portCeilingGbps > 0 {
             self.portCeilingGbps = portCeilingGbps
+            self.isPortCeilingInferred = isPortCeilingInferred
         } else {
             self.portCeilingGbps = nil
+            self.isPortCeilingInferred = false
+        }
+        if let deviceMaxGbps, deviceMaxGbps > 0 {
+            self.deviceMaxGbps = deviceMaxGbps
+        } else {
+            self.deviceMaxGbps = nil
+        }
+        if let upstreamHubGbps, upstreamHubGbps > 0 {
+            self.upstreamHubGbps = upstreamHubGbps
+        } else {
+            self.upstreamHubGbps = nil
         }
         self.depth = depth
         self.behindExternalHub = behindExternalHub ?? (depth > 0 && modeDescription.lowercased().contains("hub"))
         self.modeDescription = modeDescription
+        self.capability = capability
+        self.bottleneckSegment = bottleneckSegment
+        self.isInferred = isInferred ?? (
+            (self.isPortCeilingInferred && (verdict == .throttled || verdict == .fullRate))
+                || bottleneckSegment == .cable
+                || (
+                    protocolKind == .usbHost
+                        && (capability?.bcdUSB != nil || capability?.isAuxiliaryBillboardEndpoint == true)
+                        && (verdict == .throttled || verdict == .normal)
+                )
+        )
+        self.isPhysicalPortInferred = isPhysicalPortInferred
         self.verdict = verdict
         self.diagnosticDetail = diagnosticDetail
     }
@@ -119,8 +232,47 @@ public struct AttachedBusDevice: Identifiable, Codable, Equatable, Sendable {
     }
 
     @MainActor
+    public func localizedNegotiatedSpeedLabel(_ localizer: AppLocalizer) -> String {
+        guard negotiatedGbps > 0 else {
+            return localizer.L("Unknown", "未知")
+        }
+        return negotiatedSpeedLabel
+    }
+
+    @MainActor
     public func localizedPortCeilingLabel(_ localizer: AppLocalizer) -> String {
-        BottleneckDiagnoser.formatCeilingGbps(portCeilingGbps, localizer: localizer)
+        let base = BottleneckDiagnoser.formatCeilingGbps(portCeilingGbps, localizer: localizer)
+        guard isPortCeilingInferred, let portCeilingGbps, portCeilingGbps > 0 else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
+    }
+
+    @MainActor
+    public func localizedPhysicalPortLabel(_ localizer: AppLocalizer) -> String {
+        if let physicalPort, !physicalPort.isEmpty {
+            return physicalPort
+        }
+        return localizer.L("Unknown", "未知")
+    }
+
+    @MainActor
+    public func localizedVerdictLabel(_ localizer: AppLocalizer) -> String {
+        let base = verdict.localizedLabel(localizer)
+        guard isInferred else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
+    }
+
+    @MainActor
+    public func localizedBottleneckSegmentLabel(_ localizer: AppLocalizer) -> String? {
+        guard let bottleneckSegment else { return nil }
+        let base = bottleneckSegment.localizedLabel(localizer)
+        guard isInferred else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
+    }
+
+    @MainActor
+    public func localizedDeviceMaxLabel(_ localizer: AppLocalizer) -> String? {
+        guard let deviceMaxGbps, deviceMaxGbps > 0 else { return nil }
+        return BottleneckDiagnoser.formatSpeedGbps(deviceMaxGbps, localizer: localizer)
     }
 
     @MainActor
@@ -164,6 +316,7 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
     public var protocolKind: BusProtocolKind
     public var maxRateLabel: String
     public var maxGbps: Double?
+    public var isMaxGbpsInferred: Bool
     public var negotiatedGbps: Double
     public var isConnected: Bool
     public var devices: [AttachedBusDevice]
@@ -174,6 +327,7 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
         protocolKind: BusProtocolKind,
         maxRateLabel: String? = nil,
         maxGbps: Double?,
+        isMaxGbpsInferred: Bool = false,
         negotiatedGbps: Double,
         isConnected: Bool,
         devices: [AttachedBusDevice]
@@ -183,9 +337,11 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
         self.protocolKind = protocolKind
         if let maxGbps, maxGbps > 0 {
             self.maxGbps = maxGbps
+            self.isMaxGbpsInferred = isMaxGbpsInferred
             self.maxRateLabel = maxRateLabel ?? BottleneckDiagnoser.formatSpeedGbps(maxGbps)
         } else {
             self.maxGbps = nil
+            self.isMaxGbpsInferred = false
             self.maxRateLabel = maxRateLabel ?? "Unknown"
         }
         self.negotiatedGbps = negotiatedGbps
@@ -195,7 +351,9 @@ public struct PhysicalPortController: Identifiable, Codable, Equatable, Sendable
 
     @MainActor
     public func localizedMaxRateLabel(_ localizer: AppLocalizer) -> String {
-        BottleneckDiagnoser.formatCeilingGbps(maxGbps, localizer: localizer)
+        let base = BottleneckDiagnoser.formatCeilingGbps(maxGbps, localizer: localizer)
+        guard isMaxGbpsInferred, let maxGbps, maxGbps > 0 else { return base }
+        return localizer.L("\(base) (inferred)", "\(base)（推断）")
     }
 
     @MainActor
@@ -290,6 +448,10 @@ public struct BusTopologySnapshot: Codable, Equatable, Sendable {
 
     public var bottleneckDevices: [AttachedBusDevice] {
         devices.filter { $0.verdict.isWarning }
+    }
+
+    public var throttledDevices: [AttachedBusDevice] {
+        devices.filter { $0.verdict == .throttled }
     }
 
     public var indeterminateDevices: [AttachedBusDevice] {

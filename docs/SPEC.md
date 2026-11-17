@@ -1,65 +1,67 @@
-# BusLensMac — Engineering Specification (`since v0.3.0` — M0)
+# BusLensMac — Engineering Specification (M0 `since v0.3.0`, M1 `since v0.4.0`)
 
-## 1. Scope & Honesty Contract (M0)
+## 1. Scope & Honesty Contract (M0 & M1)
 
-USB-C ports and cables look identical on the outside regardless of whether a link negotiates `40 Gb/s` (Thunderbolt 4 / USB4), `20 Gb/s`, `10 Gb/s`, `5 Gb/s`, `480 Mb/s`, `12 Mb/s`, or `1.5 Mb/s`. Apple's built-in *System Information.app* splits Thunderbolt trees, USB host controllers, and AC / Power Delivery state across separate raw panels.
+USB-C ports and cables look identical on the outside regardless of whether a link negotiates `40 Gb/s` (Thunderbolt 4 / USB4), `20 Gb/s`, `10 Gb/s`, `5 Gb/s`, `480 Mb/s`, `12 Mb/s`, or `1.5 Mb/s`. Apple's built-in *System Information.app* splits Thunderbolt trees, USB host controllers, and AC / Power Delivery state across separate panels without cross-referencing `ioreg` device capability descriptors or physical port tags.
 
-In **M0 (`since v0.3.0`)**, **BusLens Mac** provides a read-only GUI, menu-bar popover, and headless `--cli topology [--json]` inspector that lists attached Thunderbolt, USB4, and USB devices alongside the exact negotiated link speeds reported by `system_profiler`, with live `中文 / EN` switching.
+In **M0 (`since v0.3.0`) and M1 (`since v0.4.0`)**, **BusLens Mac** provides a read-only GUI, menu-bar popover, and headless `--cli topology|bottlenecks [--json]` inspector that pairs `system_profiler` with `ioreg` (`AppleUSBHostPort` and `IOThunderboltSwitch`) to map physical ports and compare negotiated link speeds against hardware capability descriptors, with live `中文 / EN` switching.
 
-### What M0 Does Not Claim
-- **Zero name-based classification**: `system_profiler` reports a link's *current negotiated speed*, not a peripheral's maximum hardware capability or USB interface class. Until M1 reads per-device USB/Thunderbolt capability and class descriptors from `ioreg`, BusLens Mac never inspects product or vendor names to guess whether a device is storage, a hub, or a keyboard/mouse/UPS (for example, `"Groups Backup Drive"`, `"Hidden Disk"`, `"Wooting 60HE"`, or `"Hubble Backup Drive"`).
-- **No fabricated or cross-bus controller ceilings**: When `system_profiler` omits an explicit `"Up to ..."` / `max_speed_key` ceiling on a specific controller or Thunderbolt bus, BusLens Mac sets `portCeilingGbps = nil` and displays `Unknown` (`未知`) rather than assuming `40 Gb/s` or `10 Gb/s` or copying an explicit ceiling from a sibling Thunderbolt bus.
-- **No fabricated power defaults**: When `SPPowerDataType` and `pmset -g` do not report power source or Low Power Mode, `powerSource` and `lowPowerMode` remain `nil` (`null` in JSON) and render as `Unknown` (`未知`) rather than defaulting to `"AC Power"` or `false`.
-- **Unverified hardware matrices**:
+### Honesty Boundaries & What Is Not Claimed
+- **Zero name-based classification**: BusLens Mac never inspects product or vendor names to guess whether a device is storage, a hub, or an input peripheral.
+- **Protocol-honest `Indeterminate` fallback**:
+  - When `ioreg` descriptors are absent (e.g. offline `--input` without `--ioreg-input`), non-ceiling links report `Indeterminate` (`无法判断是否被限速`), and `--cli bottlenecks --input` without `--ioreg-input` exits `1`.
+  - Per USB 2.0 §9.6.1, Full-Speed (`12 Mb/s`) devices legally report `bcdUSB = 0x0200`; unless USB class `3` proves HID, `bcdUSB = 0x0200` at `12 Mb/s` reports `Indeterminate`.
+  - Per USB 3.2 §9.6.1, USB 3.2 Gen 1x1 (`5 Gb/s`) devices can report `bcdUSB = 0x0320`; because user-space `ioreg` does not expose SuperSpeedPlus sublink speed attributes, `bcdUSB = 0x0320` at `5 Gb/s` or `10 Gb/s` reports `Indeterminate`.
+- **No fabricated ceilings, synthesized port labels, or power defaults**: Missing controller ceilings, missing `UsbIOPort` physical port labels, and missing `SPPowerDataType` / `pmset` fields remain `nil` (`null` in JSON) and render as `Unknown` (`未知`). When host port ceiling is unknown, bottleneck attribution reports `Cannot determine if cable or port` (`无法判断是线还是口`) instead of defaulting to cable.
+- **Explicit `inferred` (`推断`) marker on inferred values and conclusions**: Any value or conclusion derived by inference rather than read directly (`bcdUSB` conclusions, USB Billboard class `17` auxiliary status, pure USB 2.0 / 1.x protocol-constant port ceilings, and Thunderbolt cable-limit attribution by elimination) carries an explicit `(inferred)` / `（推断）` marker across CLI text, `--json` (`isInferred: true`), menu bar, and dashboard outputs.
+- **Real-hardware verification scope & unverified matrices**:
+  - **Verified on real hardware**: Only external device enumeration count (`3` attached devices) and negotiated link speeds (`40 Gb/s`, `480 Mb/s`, `12 Mb/s`; `0` throttled devices) on `1` machine (Apple Silicon Mac mini, macOS 27.0.1 arm64).
+  - **Link throttling & bottleneck segment judgment (`Throttled` / `bcdUSB` inference, charging-only cables & external USB 2.0 hub throttling)**: *Unverified on real hardware (synthetic fixtures only) / 未在真机验证（仅合成样本测试）*.
   - **macOS 14–15 legacy `SPUSBDataType` schema**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
+  - **Retained legacy & AC charger keys (`location_id`, `vendor_id`, `manufacturer`, `Built-in_Device`, `device_speed`, `serial_num`, `sppower_ac_charger_watts`)**: *Key names sourced from public legacy-format samples (`Built-in_Device` from XML; JSON key name unconfirmed) or macOS built-in SystemProfiler string tables; not verified on the author's machine / 键名来自旧格式的公开样本或系统自带的字符串表，没有在作者的机器上验证*.
   - **Thunderbolt 5 (`80 Gb/s` / `120 Gb/s`)**: *Unverified on real hardware (synthetic fixtures only) / 尚未在真机上验证（仅合成样本测试）*.
-  - Real-hardware verification in M0 covers **macOS 27.0.1 (`26A434`) arm64** on Apple Silicon Mac mini (`SPThunderboltDataType`, `SPUSBHostDataType`, `SPPowerDataType`).
 
 ---
 
 ## 2. Non-Goals & Privacy Invariants
 
-- **Zero Root Privileges**: Uses user-space `system_profiler SPThunderboltDataType SPUSBHostDataType SPUSBDataType SPPowerDataType -json` (with `pmset -g` fallback for Low Power Mode) without `sudo` or DriverKit entitlements.
+- **Zero Root Privileges & Read-Only Inspection**: Uses user-space read-only `/usr/sbin/system_profiler`, `/usr/sbin/ioreg -a -r -c AppleUSBHostPort -l`, `/usr/sbin/ioreg -a -r -c IOThunderboltSwitch -l`, and `/usr/bin/pmset -g` without `sudo`, DriverKit, or opening `IOUSBHostDevice` user clients.
 - **Zero Network Access**: Offline pure-SwiftPM (`macOS 14.0+`, `arm64`) executable.
-- **Zero Preferences Side Effects in Headless / Test Runs**: CLI invocations (`--cli`, `--help`, `--version`, `--export-screenshots`) use `AppLocalizer(fixedLanguage:)` and exit via `Darwin.exit` before `NSApplication` / AppKit starts; unit tests inject `InMemoryPreferenceStore` so `~/Library/Preferences` is never modified.
-- **Automatic Hardware Identifier Redaction**: Device serial numbers (`serial_num`, `device_serial`, `USBDeviceKeySerialNumber`) and Thunderbolt UUIDs (`domain_uuid_key`, `switch_uid_key`, `uid_key`) are scrubbed at parse time while preserving non-identifying link tags such as `receptacle_upstream_ambiguous_tag` needed for per-device Thunderbolt negotiated speeds.
+- **Zero Preferences Side Effects in Headless / Test Runs**: CLI invocations exit via `Darwin.exit` before `NSApplication` / AppKit starts; unit tests inject `InMemoryPreferenceStore` so `~/Library/Preferences` is never modified.
+- **Automatic Hardware Identifier Redaction**: Serial numbers (`serial_num`, `USBDeviceKeySerialNumber`, `kUSBSerialNumberString`, `USB Serial Number`) and UUIDs/UIDs (`domain_uuid_key`, `switch_uid_key`, `uid_key`, `kUSBContainerID`, `Device GUID`, `Switch UID`, `Domain UUID`) are scrubbed while preserving link speed and topology tags (`receptacle_upstream_ambiguous_tag`, `locationID`, `UsbIOPort`).
 
 ---
 
-## 3. Data Collection & Three-State M0 Verdicts
+## 3. Data Collection & Five-State Verdicts
 
-### 3.1 Collectors (`BusProfilerCollector.swift`)
-1. **`SPThunderboltDataType`**:
-   - Reads bus-level `receptacle_*_tag` speeds and walks nested `_items` trees (including daisy-chained downstream devices), preferring each device's own `receptacle_upstream_ambiguous_tag.current_speed_key` over the upstream host receptacle speed.
-   - Extracts explicit ceiling strictly per bus when `"Up to ..."` or `max_speed_key` is present on that bus (`nil` / `Unknown` otherwise; never copied across sibling buses).
-2. **`SPUSBHostDataType` (macOS 26–27+) & Legacy `SPUSBDataType` (macOS 14–15 synthetic fallback)**:
-   - Walks controller and hub `_items` trees.
-   - Filters Apple's built-in internal root/companion hubs strictly via `USBKeyHardwareType == "Built-in"` or `Built-in_Device == "Yes"`.
-   - Identifies external USB hub containers structurally via child `_items` or explicit USB hub device class (`9` / `0x09`), never by substring `"hub"` in product names, so leaf peripherals whose product names contain `"hub"` remain visible.
-   - Labels USB host controllers by hardware location ID (e.g., `(0x02000000)`) when available instead of sequential `#1` numbering.
+### 3.1 Collectors (`BusProfilerCollector.swift` & `IORegistryCollector.swift`)
+1. **`SPThunderboltDataType` + `IOThunderboltSwitch`**:
+   - Reads per-device `receptacle_upstream_ambiguous_tag.current_speed_key` across direct and daisy-chained switches.
+   - Maps host `Router ID` -> `IOThunderboltPort` `Socket ID` -> physical port (`Port-USB-C@N`) and decodes `Supported Link Speed` × `Supported Link Width` for host ceiling and attached switch max capability.
+2. **`SPUSBHostDataType` / `SPUSBDataType` + `AppleUSBHostPort`**:
+   - Resolves `locationID` to ancestor host `AppleUSBHostPort` (`UsbIOPort`, e.g. `Port-USB-C@6`); missing `UsbIOPort` or missing explicit port ceiling remains `nil` (`Unknown` / `未知`).
+   - Filters only Apple built-in hubs (`Built-in` / `USBPortType` `1` or `2`) and explicit USB Hub Class (`bDeviceClass == 9`) containers (`U13`); composite (`0`) and Billboard (`17`) docks with downstream devices remain visible.
 3. **`SPPowerDataType` + `pmset -g`**:
-   - Extracts optional AC / Battery state (`powerSource: String?`), USB-C PD negotiated wattage (`wattage: Int?`), and optional Low Power Mode (`lowPowerMode: Bool?`), reporting `Unknown` / `未知` whenever power telemetry is absent.
+   - Extracts optional AC / Battery state, USB-C PD wattage, and Low Power Mode (`Unknown` / `未知` when absent).
 
-### 3.2 Honest M0 Verdicts (`BottleneckDiagnoser.swift`)
-Every attached device receives one of three factual verdicts without inspecting device or vendor names:
-1. **`fullRate`** (`Full bus rate` / `满速`) — Negotiated speed meets or exceeds an explicit controller ceiling (`>= ceiling`), or operates at `>= 40 Gb/s` Thunderbolt / USB4 link rate when ceiling is unreported.
-2. **`lowSpeedPeripheral`** (`Low-speed peripheral` / `低速外设（USB 1.x）`) — USB 1.x link operating at `1.5 Mb/s` or `12 Mb/s` (`<= 0.0125 Gbps`), classified strictly from negotiated link speed.
-3. **`indeterminate`** (`Indeterminate` / `无法判断是否被限速`) — Reports `"Negotiated at X; cannot determine if cable/hub-limited without device max capability."` (`"实际速率 X，无法判断是否被限速。"`). All `480 Mb/s` (USB 2.0) and `5 Gb/s` / `10 Gb/s` / `20 Gb/s` links below an explicit ceiling receive `indeterminate` in M0.
+### 3.2 Descriptor-Backed Verdicts (`BottleneckDiagnoser.swift`)
+1. **`fullRate`** (`Full bus rate` / `满速`) — Negotiated speed meets explicit port ceiling or `>= 40 Gb/s` without falling below proven device max capability.
+2. **`normal`** (`Normal` / `正常`, or `Normal (inferred)` / `正常（推断）` when derived from `bcdUSB`) — Negotiated speed matches explicit hardware capability (healthy `bDeviceClass == 17` Billboard) or `bcdUSB`-inferred ceiling (`0x0200` at `480 Mb/s`, `0x0300` at `5 Gb/s`, `0x0310` at `10 Gb/s`).
+3. **`lowSpeedPeripheral`** (`HID peripheral` / `HID / 低速外设`) — Verified USB HID (`class == 3`) at `1.5 Mb/s` or `12 Mb/s` (`U14`).
+4. **`throttled`** (`Throttled` / `被限速`, or `Throttled (inferred)` / `被限速（推断）` when derived from `bcdUSB`) — Device capability exceeds negotiated rate (explicit Thunderbolt switch capability > negotiated bandwidth, or `bcdUSB == 0x0210` / `>= 0x0300` inferred SuperSpeed device below `5 Gb/s`), classified into `port` (`端口限速`), `hub` (`集线器限速`), `cable` (`线缆限速`), or `cable_or_port_indeterminate` (`无法判断是线还是口`) when host port ceiling is unknown.
+5. **`indeterminate`** (`Indeterminate` / `无法判断是否被限速`) — Capability descriptors absent or USB specification ambiguous.
 
 ---
 
-## 4. Planned Roadmap (Out of M0 Scope)
+## 4. Planned Roadmap (M2)
 
-- **Planned (M1)**: Read per-device hardware capability descriptors (`bcdUSB`, SuperSpeed USB Device Capability BOS descriptors, USB device/interface class descriptors, and Thunderbolt link capability registers) from `ioreg` to compare actual device maximum capability against negotiated speed, enabling evidence-backed `--cli bottlenecks`.
-- **Planned (M2)**: Live hot-plug stream (`IOKit` notification port) and historical link-drop counter.
+- **Planned (M2)**: Short sequential read probe integration with `CrystalDiskMarkMac`, event-driven `IOKit` hot-plug speed history, and user-space USB-C e-marker cable investigation.
 
 ---
 
 ## 5. Targets & Verification Gates
 
-- `BusLensMacCore` (Swift library): Models, `BusProfilerCollector`, `BottleneckDiagnoser`, `BusCLIRunner`, `AppLocalizer`, SwiftUI views, and `[DEMO]` screenshot exporter.
-- `BusLensMac` (Executable): `BusLensMain.swift` (`@main`) intercepts CLI flags strictly before SwiftUI `App.main()` initializes AppKit.
-- `Scripts/test.sh`:
-  - `./Scripts/test.sh scope <Diagnoser|Collector|CLI>` — fast scoped unit tests.
-  - `./Scripts/test.sh milestone 0 [--record]` — scoped suites + `Scripts/acceptance/m0-acceptance.sh` + `Scripts/acceptance/readme-commands.sh` (writes scrubbed `reports/*.txt` only when `--record` is passed).
-  - `./Scripts/test.sh release` — full test suite, app bundle build, scrubbed acceptance reports (`reports/m0-acceptance.txt`, `reports/readme-commands.txt`), and `rea-build-guard` audit.
+- `./Scripts/test.sh scope <Diagnoser|Collector|CLI>` — fast scoped unit tests.
+- `./Scripts/test.sh milestone 0 [--record]` — M0 honesty gate + README command replay.
+- `./Scripts/test.sh milestone 1 [--record]` — M1 live `system_profiler` + `ioreg` differential gate (`Scripts/acceptance/m1-differential.sh`) + 16 synthetic scenarios + `U13`/`U14` + mutation checks + README command replay.
+- `./Scripts/test.sh release` — full unit tests, `.app` build, M0 + M1 gates, README replay, and `rea-build-guard`.

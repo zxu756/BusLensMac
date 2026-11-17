@@ -1,0 +1,166 @@
+{
+  "_capture_metadata": {
+    "captured_at_utc": "2026-11-15T04:11:48Z",
+    "command": "/usr/sbin/system_profiler SPThunderboltDataType SPUSBHostDataType SPUSBDataType SPPowerDataType -json",
+    "removed_keys": [
+      "USBDeviceKeySerialNumber",
+      "domain_uuid_key",
+      "switch_uid_key"
+    ],
+    "scrub_script": "Scripts/scrub-ioreg.py",
+    "synthetic_entries_added": 0
+  },
+  "SPPowerDataType": [
+    {
+      "AC Power": {
+        "Automatic Restart On Power Connect": 0,
+        "Automatic Restart On Power Loss": "No",
+        "Current Power Source": "TRUE",
+        "Disk Sleep Timer": 10,
+        "Display Sleep Timer": 0,
+        "LowPowerMode": "No",
+        "PrioritizeNetworkReachabilityOverSleep": "No",
+        "Sleep On Power Button": "Yes",
+        "System Sleep Timer": 1,
+        "Wake On LAN": "Yes"
+      },
+      "_name": "sppower_information"
+    },
+    {
+      "_name": "sppower_hwconfig_information",
+      "sppower_ups_installed": "FALSE"
+    },
+    {
+      "_name": "sppower_ac_charger_information",
+      "sppower_ac_charger_family": "0x0000"
+    }
+  ],
+  "SPThunderboltDataType": [
+    {
+      "_name": "thunderboltusb4_bus_3",
+      "device_name_key": "Mac mini",
+      "receptacle_1_tag": {
+        "current_speed_key": "Up to 40 Gb/s",
+        "link_status_key": "0x100",
+        "receptacle_id_key": "4",
+        "receptacle_status_key": "receptacle_no_devices_connected"
+      },
+      "route_string_key": "0",
+      "vendor_name_key": "Apple Inc."
+    },
+    {
+      "_items": [
+        {
+          "_name": "TBU405Pro",
+          "device_id_key": "0x1",
+          "device_name_key": "TBU405Pro",
+          "device_revision_key": "0x1",
+          "mode_key": "thunderbolt_three",
+          "receptacle_upstream_ambiguous_tag": {
+            "current_speed_key": "40 Gb/s",
+            "lc_version_key": "1.45.0",
+            "link_status_key": "0x2",
+            "receptacle_status_key": "receptacle_connected"
+          },
+          "route_string_key": "1",
+          "switch_version_key": "67.1",
+          "vendor_id_key": "0x0025",
+          "vendor_name_key": "ACASIS"
+        }
+      ],
+      "_name": "thunderboltusb4_bus_1",
+      "device_name_key": "Mac mini",
+      "receptacle_1_tag": {
+        "current_speed_key": "40 Gb/s",
+        "link_status_key": "0x2",
+        "micro_version_key": "0.0.0",
+        "receptacle_id_key": "2",
+        "receptacle_status_key": "receptacle_connected"
+      },
+      "route_string_key": "0",
+      "vendor_name_key": "Apple Inc."
+    },
+    {
+      "_name": "thunderboltusb4_bus_0",
+      "device_name_key": "Mac mini",
+      "receptacle_1_tag": {
+        "current_speed_key": "Up to 40 Gb/s",
+        "link_status_key": "0x100",
+        "receptacle_id_key": "1",
+        "receptacle_status_key": "receptacle_no_devices_connected"
+      },
+      "route_string_key": "0",
+      "vendor_name_key": "Apple Inc."
+    }
+  ],
+  "SPUSBDataType": [],
+  "SPUSBHostDataType": [
+    {
+      "Driver": "AppleT8132USBXHCI",
+      "USBKeyHardwareType": "Built-in",
+      "USBKeyLocationID": "0x02000000",
+      "_items": [
+        {
+          "USBDeviceKeyLinkSpeed": "10 Gb/s",
+          "USBDeviceKeyProductID": "0x800c",
+          "USBDeviceKeyProductVersion": "0x5615",
+          "USBDeviceKeyVendorID": "0x05ac",
+          "USBDeviceKeyVendorName": "Apple",
+          "USBKeyHardwareType": "Built-in",
+          "USBKeyLocationID": "0x02200000",
+          "_name": "USB3 Gen2 Hub"
+        },
+        {
+          "USBDeviceKeyLinkSpeed": "480 Mb/s",
+          "USBDeviceKeyProductID": "0x800b",
+          "USBDeviceKeyProductVersion": "0x5615",
+          "USBDeviceKeyVendorID": "0x05ac",
+          "USBDeviceKeyVendorName": "Apple",
+          "USBKeyHardwareType": "Built-in",
+          "USBKeyLocationID": "0x02100000",
+          "_items": [
+            {
+              "USBDeviceKeyLinkSpeed": "12 Mb/s",
+              "USBDeviceKeyPowerAllocation": "2.48 W (496 mA)",
+              "USBDeviceKeyProductID": "0x4026",
+              "USBDeviceKeyProductVersion": "0x0206",
+              "USBDeviceKeyVendorID": "0x3151",
+              "USBKeyHardwareType": "Removable",
+              "USBKeyLocationID": "0x02120000",
+              "_name": "AJAZZ AJ159 APEX"
+            }
+          ],
+          "_name": "USB2 Hub"
+        }
+      ],
+      "_name": "USB 3.1 Bus"
+    },
+    {
+      "Driver": "AppleT8132USBXHCI",
+      "USBKeyHardwareType": "Built-in",
+      "USBKeyLocationID": "0x00000000",
+      "_name": "USB 3.1 Bus"
+    },
+    {
+      "Driver": "AppleT8132USBXHCI",
+      "USBKeyHardwareType": "Built-in",
+      "USBKeyLocationID": "0x01000000",
+      "_name": "USB 3.1 Bus"
+    },
+    {
+      "Driver": "AppleT8132USBXHCI",
+      "USBKeyHardwareType": "Built-in",
+      "USBKeyLocationID": "0x03000000",
+      "_name": "USB 3.1 Bus"
+    },
+    {
+      "Driver": "AppleUSBXHCITR",
+      "USBControllerKeyPCIDeviceID": "0x15f0",
+      "USBControllerKeyPCIRevisionID": "0x0006",
+      "USBControllerKeyPCIVendorID": "0x8086",
+      "USBKeyHardwareType": "Thunderbolt",
+      "USBKeyLocationID": "0x20000000",
+      "_name": "USB 3.0 Bus"
+    }
+  ]
+}
