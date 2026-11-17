@@ -581,7 +581,7 @@ public enum BusProfilerCollector {
         var explicitLowPower: Bool?
 
         for entry in powerItems {
-            // `sppower_ac_charger_watts`: present in /System/Library/SystemProfiler/SPPowerReporter.spreporter string table (emitted only on Macs with AC charger information); unverified on the author's machine (absent on this Mac mini).
+            // `sppower_ac_charger_watts`: the only key in this group found in a string table on the author's machine (/System/Library/SystemProfiler/SPPowerReporter.spreporter; emitted only on Macs with AC charger information); value never observed here, unverified on the author's machine (absent on this Mac mini).
             if let w = entry["sppower_ac_charger_watts"] as? String, let parsed = Int(w.trimmingCharacters(in: .whitespacesAndNewlines)) {
                 watts = parsed
             } else if let wInt = entry["sppower_ac_charger_watts"] as? Int {
